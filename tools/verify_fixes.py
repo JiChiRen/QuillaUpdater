@@ -422,7 +422,7 @@ def test_query_line_returns_on_idle():
 def test_app_shell_skips_blind_enter():
     """An APP shell that answers 'part' must not absorb 3 x 2 s ENTER retries."""
     sess = _make_session()
-    sess._drain_text = lambda timeout=2.0, idle=None: b""
+    sess._drain_text = lambda timeout=2.0, idle=None, first=None: b""
     sess._query_line = lambda cmd, timeout=2.0, idle=0.35: b"part: app1\r\n"
     called = {"enter": 0, "reset": 0}
     sess.enter = lambda: called.__setitem__("enter", called["enter"] + 1)
@@ -438,6 +438,52 @@ def test_app_shell_skips_blind_enter():
         pass
     check("detect.app1 skips blind ENTER", called["enter"] == 0, called)
     check("detect.app1 resets into qboot", called["reset"] == 1, called)
+
+
+def test_banner_probe_exits_when_line_is_quiet():
+    """A silent line must not burn the whole banner window.
+
+    The board has been in the APP shell for a while and printed its banner
+    on boot, so nothing will arrive. Waiting the full 4 s collected b"" and
+    cost four seconds on every ordinary upgrade.
+    """
+    sess = _make_session()
+    sess._read_some = lambda: b""
+    t0 = time.time()
+    out = sess._drain_text(4.0, idle=1.0, first=0.5)
+    took = time.time() - t0
+    check("banner.quiet returns empty", out == b"", out)
+    check("banner.quiet exits early", took < 1.2, "%.2f s" % took)
+
+
+def test_banner_probe_keeps_window_once_data_starts():
+    """Once the first byte lands the whole window applies: no cut-off banner.
+
+    A board that is really booting prints in bursts; `first` must not close
+    the window on it. The second burst arrives after `first` elapsed and
+    still has to be collected.
+    """
+    sess = _make_session()
+    born = time.time()
+    seen = {"first": False, "second": False}
+
+    def _read():
+        el = time.time() - born
+        if not seen["first"] and el >= 0.05:
+            seen["first"] = True
+            return b"[BOOT] qboot v1.0\r\n"
+        if not seen["second"] and el >= 0.60:
+            seen["second"] = True
+            return b"enter upgrade mode\r\n"
+        return b""
+
+    sess._read_some = _read
+    t0 = time.time()
+    out = sess._drain_text(4.0, idle=1.0, first=0.5)
+    took = time.time() - t0
+    check("banner.burst keeps both halves",
+          b"enter upgrade mode" in out, out)
+    check("banner.burst stops on idle", took < 2.5, "%.2f s" % took)
 
 
 def test_swqboot_clears_device_line_first():
@@ -464,7 +510,7 @@ def test_swqboot_clears_device_line_first():
     sess._write_bytes = _write
     sess._flush_input = lambda: None
     sess._read_some = lambda: b""
-    sess._drain_text = lambda timeout=2.0, idle=None: b""
+    sess._drain_text = lambda timeout=2.0, idle=None, first=None: b""
     sess._query_line = lambda cmd, timeout=2.0, idle=0.35: b"part: qboot\r\n"
     sess.port_lost = False
 
@@ -638,6 +684,8 @@ def main():
     test_speed_uses_write_phase_only()
     test_query_line_returns_on_idle()
     test_app_shell_skips_blind_enter()
+    test_banner_probe_exits_when_line_is_quiet()
+    test_banner_probe_keeps_window_once_data_starts()
     test_swqboot_clears_device_line_first()
     test_run_does_not_hang_when_end_commits()
     test_run_signs_on_key_device()

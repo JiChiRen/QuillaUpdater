@@ -458,13 +458,19 @@ class Session(object):
             self._log("warn", i18n.t("sess.write_failed", err=e))
             return False
 
-    def _drain_text(self, timeout=2.0, idle=None):
+    def _drain_text(self, timeout=2.0, idle=None, first=None):
         """Collect whatever text arrives in `timeout` seconds (banner / echo).
 
         With `idle`, return as soon as `idle` seconds pass with nothing new
         after at least one byte arrived. A shell reply is a burst: `part` and
         `pinfo` answer in a few milliseconds, so spinning the full window for
         them costs two seconds per probe and collects nothing.
+
+        With `first`, return b"" when not a single byte shows up within that
+        many seconds. A board already sitting in the APP shell printed its
+        banner long ago, so the window would otherwise idle for its full
+        length before the probe even starts. Once the first byte does arrive
+        the full `timeout` applies -- a booting board is never cut short.
         """
         buf = b""
         t0 = time.time()
@@ -476,6 +482,8 @@ class Session(object):
                 buf += chunk
                 last = time.time()
             elif buf and idle is not None and (time.time() - last) >= idle:
+                return buf
+            elif not buf and first is not None and (time.time() - t0) >= first:
                 return buf
             else:
                 time.sleep(0.02)
@@ -692,7 +700,16 @@ class Session(object):
     def ensure_upgrade_mode(self):
         """Detect the board state and land in the upgrade state machine."""
         self._log("info", i18n.t("sess.reading_banner"))
-        banner = self._drain_text(4.0)
+        # A board already running the APP printed its banner seconds ago, so
+        # the full window would sit idle and collect nothing -- four seconds
+        # on the path every ordinary upgrade takes. Probe for a quiet line
+        # first. A board that really is booting shows its first byte within
+        # milliseconds and then still gets the whole window, so the
+        # upgrade-idle and just-powered-on cases are unchanged. The idle gap
+        # stays at a full second: a booting board can pause between the boot
+        # banner and the shell prompt, and cutting that off would lose the
+        # "enter upgrade mode" line that identifies the upgrade-idle state.
+        banner = self._drain_text(4.0, idle=1.0, first=0.5)
         self._log("debug", "banner=%r" % banner)
         text0 = banner.decode("latin1", errors="replace")
 

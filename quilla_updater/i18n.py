@@ -259,7 +259,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
 
     # ===================== session.py operator-facing lines =====================
     "sess.opened": "已打开 {port} @ {baud} 8N1",
-    "sess.reading_banner": "读取启动 banner（4 秒）...",
+    "sess.reading_banner": "读取设备输出（最长 4 秒）...",
     "sess.already_upgrade": "板卡已处于升级模式（存在 QIAP 标志），将直接发送 ENTER。",
     "sess.not_qboot_try_enter": "未检测到 QBOOT shell；先尝试直接发送 ENTER（兼容升级空闲态）。",
     "sess.app_shell_reset": "检测到 APP shell（part 返回 app1）；通过 swqboot 复位进入 QBOOT。",
@@ -421,7 +421,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "cli.fw_summary": "固件: {summary}",
     "cli.warn_no_secver": "无 .quilla_secver 段 - KEY 版将拒绝该镜像。",
     "cli.warn_no_key": "未指定 --key：不发送 SIGN 帧，已烧录公钥的设备将拒绝本次升级。",
-    "cli.reading_banner": "读取启动 banner（4 秒）...",
+    "cli.reading_banner": "读取设备输出（最长 4 秒）...",
     "cli.how_to_read": "结果解读：",
     "cli.hint_qboot": "  part 含 'qboot'  -> QBOOT shell，'qiap' 可直接升级",
     "cli.hint_app1": "  part 含 'app1'   -> APP 运行中，工具会先执行 swqboot",
@@ -577,7 +577,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "kt.copied_en": "Copied to clipboard: {what}\n",
 
     "sess.opened_en": "Opened {port} @ {baud} 8N1",
-    "sess.reading_banner_en": "Reading startup banner (4 s) ...",
+    "sess.reading_banner_en": "Reading device output (up to 4 s) ...",
     "sess.already_upgrade_en": "Board already in upgrade mode (QIAP flag present); sending ENTER directly.",
     "sess.not_qboot_try_enter_en": "No QBOOT shell detected; trying a direct ENTER first (covers the upgrade-idle state).",
     "sess.app_shell_reset_en": "APP shell detected (part answered app1); resetting into QBOOT via swqboot.",
@@ -752,7 +752,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
         "No --key given: the SIGN frame is not sent, so a device with a public key "
         "flashed will reject this upgrade."
     ),
-    "cli.reading_banner_en": "Reading the startup banner (4 s) ...",
+    "cli.reading_banner_en": "Reading device output (up to 4 s) ...",
     "cli.how_to_read_en": "How to read the result:",
     "cli.hint_qboot_en": (
         "  part contains 'qboot' -> QBOOT shell, 'qiap' can upgrade directly"
