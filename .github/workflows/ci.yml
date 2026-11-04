@@ -31,6 +31,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .
 
+      - name: License header check
+        run: python tools/add_license_header.py --check
+
       - name: Self-test (frame codec, CRC, Ed25519 vectors)
         run: python -m quilla_updater.cli --self-test
 

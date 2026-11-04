@@ -7,8 +7,15 @@
 *.toml  text eol=lf
 *.txt   text eol=lf
 *.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
 *.bat   text eol=crlf
 *.cmd   text eol=crlf
+
+.gitattributes text eol=lf
+
+# Licence text is quoted by tooling and compared across projects; keep it LF.
+LICENSE text eol=lf
 
 # Never let git touch these.
 *.ico   binary

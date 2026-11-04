@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Launch the Quilla Updater GUI (Linux / macOS).
+# Copyright (c) 2026, JiChiRen Info. Tech.  BSD-3-Clause (see LICENSE).
 set -e
 cd "$(dirname "$0")"
 PY=${PYTHON:-python3}

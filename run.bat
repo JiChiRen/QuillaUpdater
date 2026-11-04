@@ -1,5 +1,6 @@
 @echo off
 REM Launch the Quilla Updater GUI.
+REM Copyright (c) 2026, JiChiRen Info. Tech.  BSD-3-Clause (see LICENSE).
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
