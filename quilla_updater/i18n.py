@@ -185,7 +185,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.dlg_invalid_fw_title": "固件无效",
     "gui.dlg_invalid_key_title": "私钥无效",
     "gui.dlg_success_title": "升级成功",
-    "gui.dlg_success": "新固件已运行：\n\n{stamp}",
+    "gui.dlg_success": "烧录完成：\n\n{stamp}",
     "gui.dlg_cancelled": "已取消。板卡仍保留 QIAP 标志，重新运行即可继续升级。",
 
     "gui.port_err_busy": "串口被占用",
@@ -237,7 +237,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.detail_progress": "{done} / {total} B",
     "gui.writing_pct": "写入中 {pct:.0f}%",
     "gui.sign_detail": "设备侧 Ed25519 验签（耗时数秒至数十秒）",
-    "gui.verify_detail": "等待 [QAPP] 启动戳",
+    "gui.verify_detail": "后置确认：检查随完成码到达的启动横幅（非致命）",
 
     # phase text
     "phase.detect": "检测板卡状态 ...",
@@ -245,7 +245,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "phase.write": "写入固件",
     "phase.end": "提交长度与 CRC ...",
     "phase.sign": "设备验签中（请勿断电）",
-    "phase.verify": "等待新固件启动 ...",
+    "phase.verify": "后置确认：短时窥视启动横幅（非致命）...",
     "phase.done": "完成",
 
     # key tool result lines
@@ -315,13 +315,13 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.end_sent": "END (total_len={length} total_crc=0x{crc:04X})",
     "sess.end_status": "END 返回状态={status}",
     "sess.end_accepted": "END 已接受（若设备持有公钥，提交仍待定）。",
-    "sess.end_committed": "设备已在 END 阶段完成提交并复位（未配置公钥），SIGN 环节不再适用。",
+    "sess.end_committed": "设备已报告提交完成（重启前的完成公告），SIGN 环节不再适用。",
     "sess.sign_skipped_committed": "提交已于 END 完成，跳过 SIGN 帧。",
-    "sess.sign_skipped_gone": "端口处于掉线状态，不发送 SIGN 帧；直接以启动戳确认结果。",
+    "sess.sign_skipped_gone": "端口在提交复位时掉线，不发送 SIGN 帧；将以复位证据判定完成（弱证据）。",
 
     "sess.sign_sent": "已发送 SIGN 帧（64 字节签名）；设备侧验签期间串口无输出，请勿断电或复位。",
-    "sess.sign_no_ack_reset": "复位前未收到 SIGN ACK；升级结果将由启动戳确认。",
-    "sess.sign_no_ack_alive": "在 {timeout:.0f} 秒内未收到 SIGN ACK；正在检查启动戳 ...",
+    "sess.sign_no_ack_reset": "复位前未收到 SIGN ACK 或提交公告；依据设备复位判定完成（弱证据，建议复核板卡）。",
+    "sess.sign_no_ack_alive": "在 {timeout:.0f} 秒内未收到 SIGN ACK、提交公告或启动戳；无法确认提交。",
     "sess.sign_accepted": "SIGN 已通过设备验签。",
     "sess.sign_nak": "SIGN 被拒绝: NAK(0x{cmd:02X}) reason=0x{reason:02X} {txt}",
     "sess.sign_unexpected": "SIGN: 收到非预期响应 0x{cmd:02X}",
@@ -335,9 +335,18 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     ),
     "sess.stamp_mismatch": "启动戳与镜像不符（收到 '{stamp}'，期望 '{expected}'）；继续等待。",
     "sess.port_dropped_stamp": "设备复位时端口掉线；待其重新枚举后再查找启动戳。",
-    "sess.stamp_timeout": (
-        "在 {timeout:.0f} 秒内未收到 '[QAPP] ...' 启动戳。镜像可能未提交、"
-        "APP 可能未打印戳，或 SECURE 版仍在验签。升级结果未确认，请重新探测板卡。"
+    "sess.ack_complete": (
+        "烧录完成（重启前确认，依据 {ack}）：flag=APP1 与 manifest 已提交，"
+        "设备正在重启进入 APP；无需等待启动戳。"
+    ),
+    "sess.completion_weak": (
+        "完成结论仅依据设备复位（端口掉线），未收到完成码；拔线与复位表现相同，"
+        "请复核板卡运行状态。"
+    ),
+    "sess.completion_no_stamp": "{ack}（无需等待新 APP 启动横幅）",
+    "sess.err_no_commit_ack": (
+        "未收到提交后的完成 ACK、提交公告或启动戳，也没有观察到设备复位，无法确认烧录完成。"
+        "请检查 QIAP 的 END / SIGN 阶段是否返回 NAK，或设备是否仍停在 QBOOT。"
     ),
 
     "sess.upgrade_finished": (
@@ -368,8 +377,8 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     ),
     "sess.err_sign_rejected": "SIGN 被拒绝: NAK(0x{cmd:02X}) reason=0x{reason:02X} {txt}",
     "sess.err_stamp_timeout": (
-        "在 {timeout:.0f} 秒内未收到 '[QAPP] ...' 启动戳。镜像可能未提交、"
-        "APP 可能未打印戳，或 SECURE 版仍在验签。升级结果未确认，请重新探测板卡。"
+        "在 {timeout:.0f} 秒内未收到 '[QAPP] ...' 启动戳。该检查不是完成判据："
+        "完成由 QBOOT 的提交 ACK 判定。若需复核，请重新探测板卡。"
     ),
     "sess.err_cannot_enter": (
         "无法进入升级模式。请将板卡置于 QBOOT shell（手动发送 'qiap'，或复位板卡），"
@@ -509,7 +518,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.dlg_invalid_fw_title_en": "Invalid firmware",
     "gui.dlg_invalid_key_title_en": "Invalid private key",
     "gui.dlg_success_title_en": "Upgrade succeeded",
-    "gui.dlg_success_en": "The new firmware is running:\n\n{stamp}",
+    "gui.dlg_success_en": "Flashing complete:\n\n{stamp}",
     "gui.dlg_cancelled_en": "Cancelled. The board keeps the QIAP flag; re-run to continue the upgrade.",
 
     "gui.port_err_busy_en": "Port busy",
@@ -561,14 +570,14 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.detail_progress_en": "{done} / {total} B",
     "gui.writing_pct_en": "Writing {pct:.0f}%",
     "gui.sign_detail_en": "Device-side Ed25519 verify (seconds to tens of seconds)",
-    "gui.verify_detail_en": "Waiting for the [QAPP] boot stamp",
+    "gui.verify_detail_en": "Post-confirmation: inspecting a boot stamp that arrived with the completion code (non-fatal)",
 
     "phase.detect_en": "Detecting board state ...",
     "phase.enter_en": "Sending ENTER ...",
     "phase.write_en": "Writing firmware",
     "phase.end_en": "Committing length & CRC ...",
     "phase.sign_en": "Device verifying (do not power off)",
-    "phase.verify_en": "Waiting for the new firmware to boot ...",
+    "phase.verify_en": "Post-confirmation: brief peek for a boot stamp (non-fatal) ...",
     "phase.done_en": "Done",
 
     "kt.generated_en": "Key pair generated\n",
@@ -638,13 +647,13 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.end_sent_en": "END (total_len={length} total_crc=0x{crc:04X})",
     "sess.end_status_en": "END returned status={status}",
     "sess.end_accepted_en": "END accepted (commit still pending if the device holds a public key).",
-    "sess.end_committed_en": "The device committed and reset during END (no public key provisioned); the SIGN step no longer applies.",
+    "sess.end_committed_en": "The device reported a completed commit (pre-reset announcement); the SIGN step no longer applies.",
     "sess.sign_skipped_committed_en": "Commit already happened at END - SIGN frame skipped.",
-    "sess.sign_skipped_gone_en": "Port is down, so no SIGN frame is sent; the boot stamp decides the outcome.",
+    "sess.sign_skipped_gone_en": "Port dropped during the commit reset, so no SIGN frame is sent; the verdict will rest on reset evidence (weak).",
 
     "sess.sign_sent_en": "Sent SIGN frame (64 B signature); the link stays silent during device-side verification - do not power off or reset.",
-    "sess.sign_no_ack_reset_en": "No SIGN ACK received before the device reset; the boot stamp will confirm the result.",
-    "sess.sign_no_ack_alive_en": "No SIGN ACK within {timeout:.0f} s; checking the boot stamp ...",
+    "sess.sign_no_ack_reset_en": "No SIGN ACK or commit announcement before the reset; the verdict rests on the reset (weak evidence - re-check the board).",
+    "sess.sign_no_ack_alive_en": "No SIGN ACK, commit announcement or boot stamp within {timeout:.0f} s; the commit cannot be confirmed.",
     "sess.sign_accepted_en": "SIGN verified by the device.",
     "sess.sign_nak_en": "SIGN rejected: NAK(0x{cmd:02X}) reason=0x{reason:02X} {txt}",
     "sess.sign_unexpected_en": "SIGN: unexpected response 0x{cmd:02X}",
@@ -658,10 +667,22 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     ),
     "sess.stamp_mismatch_en": "Boot stamp does not match the image (got '{stamp}', expected '{expected}'); still waiting.",
     "sess.port_dropped_stamp_en": "Port dropped when the device reset; waiting for it to re-enumerate before looking for the boot stamp.",
-    "sess.stamp_timeout_en": (
-        "No '[QAPP] ...' boot stamp within {timeout:.0f} s. The image may not be "
-        "committed, the APP may not print a stamp, or a SECURE build is still "
-        "verifying. The upgrade is NOT confirmed; re-probe the board."
+    "sess.ack_complete_en": (
+        "Flashing complete (confirmed before the reset, evidence: {ack}): "
+        "flag=APP1 and the manifest are committed; the device is rebooting "
+        "into the APP. No boot-stamp wait is required."
+    ),
+    "sess.completion_weak_en": (
+        "The verdict rests only on a device reset (port lost): no completion "
+        "code was received, and a cable pull looks the same. Re-check that "
+        "the new APP is running."
+    ),
+    "sess.completion_no_stamp_en": "{ack} (no wait for the new APP boot stamp)",
+    "sess.err_no_commit_ack_en": (
+        "No post-commit completion ACK, commit announcement or boot stamp, and "
+        "no device reset observed, so the flash cannot be confirmed. Check for "
+        "a NAK in the QIAP END / SIGN phase, or whether the board is still in "
+        "QBOOT."
     ),
 
     "sess.upgrade_finished_en": (
@@ -693,9 +714,9 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     ),
     "sess.err_sign_rejected_en": "SIGN rejected: NAK(0x{cmd:02X}) reason=0x{reason:02X} {txt}",
     "sess.err_stamp_timeout_en": (
-        "No '[QAPP] ...' boot stamp within {timeout:.0f} s. The image may not be "
-        "committed, the APP may not print a stamp, or a SECURE build is still "
-        "verifying. The upgrade is NOT confirmed; re-probe the board."
+        "No '[QAPP] ...' boot stamp within {timeout:.0f} s. This check is not "
+        "the completion criterion: QBOOT's commit ACK decides that. Re-probe "
+        "the board if you want to confirm which image is running."
     ),
     "sess.err_cannot_enter_en": (
         "Could not enter upgrade mode. Put the board in the QBOOT shell (send "

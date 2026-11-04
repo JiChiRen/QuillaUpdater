@@ -34,7 +34,10 @@
    - a device without a public key commits inside END and resets, so SIGN must
      be skipped instead of waiting SIGN_TIMEOUT for an ACK that cannot exist;
    - the one-shot commit/boot banners must survive frame parsing;
-   - success is the boot stamp, matched against the literal stored in the image.
+   - completion is decided BEFORE the reset on QBOOT-side evidence, for all
+     three build variants (CHECK / SEALED / SECURE); the boot stamp is only a
+     short non-fatal peek, never a gate;
+   - the accepted commit-banner strings stay in sync with the QBOOT source.
 3. bilingual UI: every lookup key resolves in both zh and en, and the GUI can
    switch language live.
 
@@ -42,6 +45,7 @@ Run:  python tools/verify_fixes.py
 """
 
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -52,6 +56,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from quilla_updater import config, i18n, protocol as P  # noqa: E402
+from quilla_updater import session as S  # noqa: E402
 from quilla_updater.image import FirmwareImage  # noqa: E402
 from quilla_updater.session import Result, Session, UpgradeError  # noqa: E402
 
@@ -131,11 +136,12 @@ def _stub_await(sess, kind, value=None):
 
 
 def test_sign_missing_ack_is_not_failure():
-    """Device resets and drops the port right after SIGN -> no ACK 0x84.
+    """Port already gone when SIGN would be sent -> no ACK 0x84.
 
     The old code waited 90 s and then declared failure even though the board
-    was already running the new image; sign() must now return normally and
-    leave the verdict to wait_app_stamp().
+    was already running the new image; sign() must return without raising.
+    The END probe already saw the device leave, so this is the early-return
+    path (the weak-evidence path is covered separately below).
     """
     sess = _make_session()
     sess.port_lost = True
@@ -253,7 +259,7 @@ def test_raw_log_survives_frame_parsing():
     """
     sess = _make_session()
     frame = P.build_frame(P.ACK_END, b"\x00")
-    packets = [frame + b"\r\n[QIAP] success. Rebooting...\r\n"]
+    packets = [frame + _FW_COMMIT_BANNER]
     sess._read_some = lambda: packets.pop(0) if packets else b""
 
     kind, _ = sess._await(1.0, watch_commit=True)
@@ -286,26 +292,42 @@ def test_image_expected_stamp():
           FirmwareImage("<mem>", b"\x00" * 64).expected_stamp is None)
 
 
+#: Current qboot_qiap_run() banner. test_commit_marker_matches_firmware()
+#: checks this against the QBOOT source so a firmware rename cannot silently
+#: break the host again.
+_FW_COMMIT_BANNER = b"\r\n[QIAP] flash complete. Rebooting into APP...\r\n"
+
+
 class _FakeBoard(object):
     """Just enough QBOOT to drive a whole run() without hardware.
 
-    Mirrors the firmware behaviour the bug report hinges on:
+    `mode` is one of the three QBOOT build variants:
 
-      * no public key  -> END commits, prints the announcement, resets
-      * public key     -> END only ACKs; the commit waits for SIGN
-      * either path    -> the APP prints its boot stamp once, after boot
+      CHECK  (no public key) -> END commits, prints the announcement, resets
+      SEALED / SEC (key)     -> END only ACKs; SIGN commits, then resets
+
+    All three commit BEFORE the reset; only their post-reset boot policy
+    differs. `emit_stamp=False` models that timing faithfully: the [QAPP]
+    banner belongs to the next boot and must not be needed for the verdict.
     """
 
     COMPRESSED = 0.01    # seconds between ACK and the commit announcement
 
-    def __init__(self, key_on_device=False):
-        self.key_on_device = key_on_device
+    def __init__(self, mode=None, key_on_device=None, emit_stamp=True):
+        if mode is None:
+            mode = "SEALED" if key_on_device else "CHECK"
+        self.mode = mode
+        self.key_on_device = ((mode != "CHECK") if key_on_device is None
+                              else key_on_device)
+        self.emit_stamp = emit_stamp
         self._parser = P.FrameParser()
         self._out = bytearray()
         self._commit_at = None
         self._stamp_at = None
         self.sign_frames = 0
         self.end_frames = 0
+        self.reset_count = 0
+        self.stamp_emitted = False
 
     # -- device -> host
     def _emit(self, frame):
@@ -315,11 +337,14 @@ class _FakeBoard(object):
         now = time.time()
         if self._commit_at is not None and now >= self._commit_at:
             self._commit_at = None
-            self._out += b"\r\n[QIAP] success. Rebooting...\r\n"
-            self._stamp_at = now + self.COMPRESSED
+            self._out += _FW_COMMIT_BANNER
+            self.reset_count += 1          # QBOOT reboots right after this
+            if self.emit_stamp:
+                self._stamp_at = now + self.COMPRESSED
         if self._stamp_at is not None and now >= self._stamp_at:
             self._stamp_at = None
             self._out += b"\r\n[QAPP] Project V0.10.0001\r\n> "
+            self.stamp_emitted = True
         data = bytes(self._out)
         del self._out[:]
         return data
@@ -416,6 +441,149 @@ def test_run_signs_on_key_device():
     res = _run_on_fake_board(fake)
     check("run.key: finished", res is not None and "[QAPP]" in res.stamp, res)
     check("run.key: SIGN sent once", fake.sign_frames == 1, fake.sign_frames)
+
+
+def test_commit_marker_matches_firmware():
+    """The commit banner is a cross-repository contract.
+
+    qboot_qiap_run() prints it; session._MARK_COMMITS recognises it. A rename
+    on the firmware side once left the host looking for the old string, so the
+    CHECK path reported "missing --key" on a board that had already committed.
+    When the Quilla tree is not checked out next to this one (CI), the source
+    half is skipped but the recognition checks still run.
+    """
+    check("marker: current banner recognised",
+          S._has_commit_mark(_FW_COMMIT_BANNER), _FW_COMMIT_BANNER)
+    check("marker: legacy banner recognised",
+          S._has_commit_mark(b"\r\n[QIAP] success. Rebooting...\r\n"))
+
+    src = os.path.join(os.path.dirname(ROOT), "quilla", "os", "services",
+                       "quilla-qboot", "qboot-main.c")
+    if not os.path.isfile(src):
+        print("  SKIP  QBOOT source not present: %s" % src)
+        return
+    with open(src, "r", encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    banners = re.findall(r'shell_puts\("([^"]*\[QIAP\][^"]*)"\)', text)
+    reboot_banners = [b for b in banners if "eboot" in b]
+    check("firmware: exactly one reboot banner", len(reboot_banners) == 1,
+          reboot_banners)
+    if len(reboot_banners) != 1:
+        return
+    literal = reboot_banners[0].encode("ascii", "replace")
+    check("firmware: host recognises its banner",
+          S._has_commit_mark(literal), literal)
+    core = reboot_banners[0].replace("\\r", "").replace("\\n", "").strip()
+    check("firmware: fake board uses the same banner",
+          core in _FW_COMMIT_BANNER.decode("ascii"), core)
+
+
+def test_all_boot_modes_complete_before_reset():
+    """CHECK / SEALED / SECURE must all finish without a [QAPP] banner.
+
+    The variants differ only in their post-reset boot policy. A verdict that
+    waited for the boot stamp would take ~20 s on SECURE, and would fail on an
+    APP that prints on another UART. None of that may gate completion.
+    """
+    for mode in ("CHECK", "SEALED", "SEC"):
+        fake = _FakeBoard(mode=mode, emit_stamp=False)
+        t0 = time.time()
+        res = _run_on_fake_board(fake)
+        took = time.time() - t0
+        tag = "modes.%s" % mode
+        check(tag + ": completed", res is not None, res)
+        check(tag + ": no boot stamp emitted", not fake.stamp_emitted,
+              fake.stamp_emitted)
+        check(tag + ": commit announced", fake.reset_count == 1,
+              fake.reset_count)
+        check(tag + ": verdict before boot", took < 3.0, "%.2f s" % took)
+        check(tag + ": evidence in result",
+              res is not None and ("0x83" in res.stamp or "0x84" in res.stamp),
+              res.stamp if res else None)
+        want_sign = 0 if mode == "CHECK" else 1
+        check(tag + ": SIGN count", fake.sign_frames == want_sign,
+              fake.sign_frames)
+
+
+def test_stamp_records_completion_evidence():
+    """A matching [QAPP] during the SIGN wait is proof of a commit.
+
+    The old code returned the stamp without recording any evidence, so run()
+    then raised "no completion ACK" on a board that had already booted the
+    new image.
+    """
+    sess = _make_session()
+    _stub_await(sess, "stamp", "[QAPP] Project V0.10.0001")
+    stamp = sess.sign(_Img())
+    check("stamp: returned", stamp == "[QAPP] Project V0.10.0001", stamp)
+    check("stamp: records completion", sess.committed_at_end is True,
+          sess.committed_at_end)
+    check("stamp: evidence named",
+          "boot stamp" in (sess.completion_code or ""), sess.completion_code)
+
+
+def test_ack_lost_on_reset_is_weak_evidence():
+    """A port lost with no ACK at all must be labelled weak, not clean."""
+    sess = _make_session()
+
+    def drop_port(timeout, **kw):
+        sess.port_lost = True
+        return (None, None)
+
+    sess._await = drop_port
+    logs = []
+    sess.on_log = lambda lvl, txt: logs.append((lvl, txt))
+    sess.sign(_Img())
+    check("weak: completion recorded", sess.committed_at_end is True,
+          sess.committed_at_end)
+    check("weak: flagged", sess.completion_is_weak is True,
+          sess.completion_is_weak)
+    check("weak: logged as warning",
+          any(lvl == "warn" for lvl, _ in logs), logs)
+
+
+def test_live_port_without_evidence_fails():
+    """A live port with no ACK / announcement / stamp is a hard failure."""
+    sess = Session("COM0")
+    sess.seed = bytes(32)
+    sess._open = lambda: None
+    sess.close = lambda: None
+    sess.on_log = lambda lvl, txt: None
+    sess.on_progress = lambda *a: None
+    sess.ensure_upgrade_mode = lambda: None
+    sess.reset_rx_log = lambda: None
+    sess.send_data = lambda data: (len(data), 0)
+    sess.end = lambda n, crc: None
+    sess.sign = lambda image: None       # records no evidence
+    sess._post_confirm = lambda ack: ack
+    err = None
+    try:
+        sess.run(FirmwareImage("<mem>", _FAKE_IMG))
+    except UpgradeError as e:
+        err = e
+    check("no-evidence: fails", err is not None, "returned normally")
+    check("no-evidence: names the missing verdict",
+          err is not None and ("ACK" in str(err) or "完成" in str(err)), err)
+
+
+def test_post_confirm_does_not_wait_for_reboot():
+    """The non-fatal peek must not wait out a SECURE boot (~20 s).
+
+    It also must not emit a VERIFY phase: run() has already announced DONE,
+    and a late phase transition would flicker the UI backwards.
+    """
+    sess = _make_session()
+    sess.port_lost = False
+    sess._read_some = lambda: b""
+    phases = []
+    sess.on_progress = lambda *a: phases.append(a[0])
+    t0 = time.time()
+    out = sess._post_confirm("ACK_SIGN 0x84")
+    took = time.time() - t0
+    check("post-confirm: returns text", bool(out), out)
+    check("post-confirm: under 1 s", took < 1.0, "%.2f s" % took)
+    check("post-confirm: no VERIFY phase", S.Progress.VERIFY not in phases,
+          phases)
 
 
 def test_speed_uses_write_phase_only():
@@ -578,15 +746,20 @@ def test_chunk_fits_device_payload_buffer():
           None if got is None else len(got[1]))
 
 
-def test_boot_stamp_is_success_criterion():
-    """wait_app_stamp() must find the APP banner and return it."""
+def test_boot_stamp_detected_in_window():
+    """wait_app_stamp() finds the APP banner when it is in the window.
+
+    This is an optional post-confirmation helper, not the completion verdict;
+    run() decides completion on QBOOT-side evidence before the reset.
+    """
     sess = _make_session()
     sess._read_some = lambda: b"noise\r\n[QAPP] v0.10 build 2026-11-04\r\n"
     stamp = sess.wait_app_stamp(timeout=2.0)
     check("stamp.detected", stamp is not None and "[QAPP]" in stamp, stamp)
 
 
-def test_boot_stamp_timeout_is_failure():
+def test_wait_app_stamp_timeout_raises():
+    """Explicit wait_app_stamp() callers still get a bounded hard error."""
     sess = _make_session()
     sess._read_some = lambda: b"nothing here\r\n"
     sess.reopen = lambda timeout=5.0: False
@@ -721,8 +894,14 @@ def main():
     test_run_does_not_hang_when_end_commits()
     test_no_key_with_public_key_names_the_real_cause()
     test_run_signs_on_key_device()
-    test_boot_stamp_is_success_criterion()
-    test_boot_stamp_timeout_is_failure()
+    test_commit_marker_matches_firmware()
+    test_all_boot_modes_complete_before_reset()
+    test_stamp_records_completion_evidence()
+    test_ack_lost_on_reset_is_weak_evidence()
+    test_live_port_without_evidence_fails()
+    test_post_confirm_does_not_wait_for_reboot()
+    test_boot_stamp_detected_in_window()
+    test_wait_app_stamp_timeout_raises()
     test_i18n_coverage()
     test_i18n_language_switch()
     test_gui_smoke()
