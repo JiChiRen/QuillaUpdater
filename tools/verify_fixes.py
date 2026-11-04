@@ -440,6 +440,42 @@ def test_app_shell_skips_blind_enter():
     check("detect.app1 resets into qboot", called["reset"] == 1, called)
 
 
+def test_swqboot_clears_device_line_first():
+    """'swqboot' must be preceded by a bare CRLF.
+
+    A binary ENTER frame is printable noise to a text shell: `app_start`
+    0x08007000 contributes 0x70 = 'p' and the "QULLOTA1" unlock key follows, so
+    those bytes sit in the shell's 128-byte line buffer with no terminator. Send
+    "swqboot\\n" straight after and the command is appended to that junk, never
+    matches, and the board stays in the APP - the failure reads as "swqboot did
+    nothing" rather than as a parsing problem.
+
+    pyserial's reset_input_buffer() cannot help here: it empties the host-side
+    queue, while the device's line buffer is only cleared by a CR/LF arriving on
+    the wire. So the ordering below is the whole fix.
+    """
+    sess = _make_session()
+    writes = []
+
+    def _write(data):
+        writes.append(data)
+        return True
+
+    sess._write_bytes = _write
+    sess._flush_input = lambda: None
+    sess._read_some = lambda: b""
+    sess._drain_text = lambda timeout=2.0, idle=None: b""
+    sess._query_line = lambda cmd, timeout=2.0, idle=0.35: b"part: qboot\r\n"
+    sess.port_lost = False
+
+    sess._reset_into_qboot()
+
+    check("swqboot.clears line before command",
+          bool(writes) and writes[0] == b"\r\n", writes)
+    check("swqboot.command follows the clear",
+          len(writes) > 1 and writes[1] == b"swqboot\n", writes)
+
+
 def test_chunk_fits_device_payload_buffer():
     """CHUNK must stay within QUILLA_QIAP_MAX_PAYLOAD, and there is no margin.
 
@@ -602,6 +638,7 @@ def main():
     test_speed_uses_write_phase_only()
     test_query_line_returns_on_idle()
     test_app_shell_skips_blind_enter()
+    test_swqboot_clears_device_line_first()
     test_run_does_not_hang_when_end_commits()
     test_run_signs_on_key_device()
     test_boot_stamp_is_success_criterion()

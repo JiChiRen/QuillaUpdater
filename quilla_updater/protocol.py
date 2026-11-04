@@ -120,12 +120,12 @@ PAGE_SIZE = 256
 #:               It only has to absorb the bytes that arrive while the QBOOT
 #:               loop is blocked inside one synchronous flash page erase
 #:               (~25-40 ms @115200 baud ~= 460 B), which it does.
-#:   bridge ring QBOOT_RX_RING_SZ = 256 B. This is a byte-stream buffer, not a
-#:               frame buffer: qboot_qiap_run() harvests the DMA ring and then
-#:               drains this ring to empty every pass, so its occupancy is the
-#:               backlog between two passes (~64 B, the host's write burst), not
-#:               the frame size. A 270-byte frame therefore passes through it in
-#:               pieces without loss.
+#:   bridge ring QBOOT_RX_RING_SZ = 512 B, sized to hold one whole 270-byte DATA
+#:               frame, so a frame enters atomically and is never split across
+#:               passes. It is still a byte-stream buffer rather than a frame
+#:               buffer: qboot_qiap_run() harvests the DMA ring and then drains
+#:               this ring to empty every pass, so occupancy is the backlog
+#:               between two passes (one host write burst), not the frame size.
 #:   payload buf QUILLA_QIAP_MAX_PAYLOAD = PAGE_SIZE + 8 = 264 B.
 #:
 #: 256 makes one DATA frame exactly one page: 8 B of addresses + 256 B of data =
@@ -136,7 +136,9 @@ PAGE_SIZE = 256
 #: Why bother: flash_write_range() stages into a 256-byte page buffer and only
 #: erases/programs when the *next* page is entered, so page-aligned chunks mean
 #: one erase per page instead of one per six frames. Fewer ACK round trips per
-#: page, roughly 3.2 KiB/s -> 4.3 KiB/s at 115200.
+#: page: 3.1 KiB/s at CHUNK=48 against 7.7 KiB/s measured on a PY32F040 at
+#: 115200 (the erase turned out to be faster than the 30-40 ms assumed when the
+#: 4.3 KiB/s figure was estimated).
 CHUNK = 256
 
 #: QUILLA_QIAP_MAX_PAYLOAD - largest payload the device will accept.

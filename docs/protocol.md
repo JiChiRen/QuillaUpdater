@@ -203,7 +203,7 @@ receive path and not the APP's shell port:
 | Stage | Size | Behaviour |
 |---|---|---|
 | USART2 RX DMA | 1024 B, CIRCULAR | never re-armed; keeps filling while the loop is blocked in a flash page erase |
-| QBOOT bridge ring | 256 B | `qboot_rx_sink()` drops on overflow; QBOOT drains it to empty every pass |
+| QBOOT bridge ring | 512 B | `qboot_rx_sink()` drops on overflow; sized to hold one whole 270 B frame |
 | QIAP payload buffer | `PAGE_SIZE + 8` = 264 B | `QUILLA_QIAP_MAX_PAYLOAD` |
 
 `CHUNK = 256` → DATA frame `8 + 256 = 264` bytes of payload, `270` bytes on the
@@ -211,10 +211,12 @@ wire; SIGN frame `6 + 64 = 70` bytes. The old "64-byte NORMAL (ping-pong) DMA"
 limit described a firmware generation that has since been replaced by circular
 DMA.
 
-The bridge ring is a byte-stream buffer, not a frame buffer: QBOOT drains it to
-empty every pass, so its occupancy is the backlog between two passes (one host
-write burst), not the frame size. A 270-byte frame passes through a 256-byte ring
-in pieces without loss. What would break it is pipelining frames, not long ones.
+The bridge ring is a byte-stream buffer rather than a frame buffer, but it is
+sized to absorb one complete frame (512 B against a 270 B frame), so a frame
+enters atomically and is never split across passes. QBOOT drains it to empty
+every pass, so occupancy is the backlog between two passes (one host write
+burst), not the frame size. What would break it is pipelining frames, not long
+ones.
 
 What actually keeps the rings safe is the **stop-and-wait handshake**: one frame
 in flight, ACK before the next. No bytes are on the wire during a page erase, so

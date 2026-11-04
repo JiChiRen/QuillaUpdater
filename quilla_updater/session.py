@@ -748,6 +748,26 @@ class Session(object):
 
         raise UpgradeError(i18n.t("sess.err_cannot_enter", banner=banner, part=part))
 
+    def _clear_device_line(self):
+        """Terminate whatever the device shell has buffered but not yet parsed.
+
+        A binary ENTER frame is meaningless to a text shell: its payload bytes
+        (``app_start`` 0x08007000 contributes 0x70 = 'p', followed by the
+        "QULLOTA1" unlock key) are printable, so they land in the shell's
+        128-byte line buffer with no terminator. A "swqboot\\n" sent afterwards
+        is glued behind that garbage, never matches a command name, and the
+        board quietly stays in the APP. The symptom looks like "swqboot does
+        nothing", not like a parsing problem, which is what makes it expensive
+        to find.
+
+        pyserial's reset_input_buffer() only empties the host-side queue; the
+        device's line buffer is cleared by an actual CR or LF arriving on the
+        wire, so this has to be written, not flushed.
+        """
+        self._flush_input()
+        self._write_bytes(b"\r\n")
+        time.sleep(0.1)
+
     def _reset_into_qboot(self):
         """'swqboot' -> MCU resets -> QBOOT shell.
 
@@ -766,6 +786,9 @@ class Session(object):
         for attempt in (1, 2):
             self._check_cancel()
             self._log("info", i18n.t("sess.swqboot_attempt", n=attempt))
+            # A failed binary ENTER may have left an unterminated line behind,
+            # and the shell would swallow the command as part of it.
+            self._clear_device_line()
             wrote = self._write_bytes(b"swqboot\n")
 
             # Give the MCU time to actually reset, then look at the port. The

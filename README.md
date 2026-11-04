@@ -235,10 +235,11 @@ honoured before any read, so an ACK and a banner in the same USB packet are both
 seen.
 
 Note on framing: the upgrade runs in QBOOT, so the size limit is its receive
-path - a 1024-byte CIRCULAR DMA ring behind a 256-byte bridge ring, with a
-`PAGE_SIZE + 8` payload buffer. The bridge ring is a byte stream, not a frame
-buffer: it is drained to empty every loop pass, so occupancy tracks the backlog
-between passes, not the frame size.
+path - a 1024-byte CIRCULAR DMA ring behind a 512-byte bridge ring, with a
+`PAGE_SIZE + 8` payload buffer. The bridge ring is a byte stream rather than a
+frame buffer, but it is sized to hold one whole 270 B frame, so a frame enters
+atomically; it is drained to empty every loop pass, so occupancy tracks the
+backlog between passes, not the frame size.
 
 One DATA frame carries a full 256-byte page (264 B of payload, 270 B on the
 wire), which is exactly `QUILLA_QIAP_MAX_PAYLOAD` - the device drops any frame
