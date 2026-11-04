@@ -337,13 +337,18 @@ regression is covered end to end instead of only unit by unit.
 - `.quilla_secver`: parses `magic="QAV1"` + version out of a real PY32F040xB
   build at offset `0x400`.
 - End to end on hardware: PY32F040xB over a WCH-Link CDC port at 115200, signed
-  upgrade of a 15688-byte QAPP, `[QAPP] Project V0.10.0001` observed after the
-  reset. The board committed during `END` (no public key provisioned), so this
-  run also exercises the commit-detection path that used to hang for 90 s.
+  upgrade of a 15688-byte QAPP. One complete upgrade was run in each of the
+  three boot modes - CHECK, SEALED and SECURE - and all three completed;
+  `[QAPP] Project V0.10.0001` was observed after the reset. An earlier run on a
+  board with no public key also exercised the commit-during-`END` path that used
+  to hang for 90 s.
 
 What is still untested: MCUs other than PY32F040xB (the APP ceiling depends on
-their `pinfo` reply), and the port-dropped-reopen path, which needs a probe that
-actually removes the COM port on reset.
+their `pinfo` reply); the port-dropped-reopen path, which needs a probe that
+actually removes the COM port on reset; the no-key-with-public-key error path,
+which needs a board with a provisioned public key and a run deliberately started
+without `--key`; and the weak-evidence path where the completion ACK is lost and
+only a reset is seen.
 
 ## Building a standalone executable
 
