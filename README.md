@@ -15,7 +15,7 @@ Host-side UART upgrader for **Quilla QBOOT** boards. Pick a serial port, pick a
 
 The protocol is the one QBOOT already speaks (see [docs/protocol.md](docs/protocol.md),
 also in [中文](docs/protocol.zh-CN.md)); this project is the missing window around
-it. It is a re-implementation and extension of `tools/quilla_host_upgrader.py`
+it. It is a re-implementation and extension of `tools/quilla_host_updater.py`
 from the [Quilla](https://github.com/JiChiRen/Quilla) tree, with a UI, a
 cooperative cancel path, and pre-flight checks that catch a doomed upgrade before
 it costs you a minute.
@@ -45,8 +45,9 @@ it costs you a minute.
   phase and says "do not power off" instead of looking frozen.
 - **Cooperative cancel** - stops between frames, leaves the board recoverable
   (the QIAP flag stays set, so a re-run resumes).
-- **Real success criterion** - waits for the new firmware's `[QAPP] ... V<ver>`
-  boot stamp. An ACK is not success.
+- **Completion before the reset** - QIAP commits before it ACKs, so CHECK,
+  SEALED and SECURE builds are all reported complete on QBOOT-side evidence;
+  no 20 s boot-stamp wait and no dependence on which UART the APP prints on.
 - **Remembers your setup** - firmware path, key path, port and baud rate survive
   a restart, so a second upgrade is one click.
 - **Bilingual UI** - Chinese / English, switchable at runtime from the top bar,
@@ -205,23 +206,43 @@ frame. `keys/` is in `.gitignore` for a reason.
 
 ## How success is decided
 
-The ACK is not the verdict. `ACK 0x83` / `ACK 0x84` only prove a frame arrived;
-the verdict is the new APP printing its one-shot boot stamp:
+The verdict is reached **before the reset**, on QBOOT-side evidence. QIAP calls
+`commit_app()` (`app_page_commit()` -> `flag=APP1` -> `done=1`) *before* it
+sends its completion ACK, so that ACK is a completion code, not merely "the
+frame arrived". All three QBOOT build variants commit before
+`qboot_qiap_run()` reboots:
 
-```
-[QAPP] Project V0.10.0001
-```
+| Variant | Boot mode | Commit point | Completion evidence |
+|---|---|---|---|
+| `QBOOT_CHECK` | CHECK, no public key | inside `END` | `ACK 0x83` + `[QIAP] flash complete. Rebooting into APP...` |
+| `QBOOT_SEALED` | SEALED, public key | after `SIGN` | `ACK 0x84` (`ACK_SIGN`) |
+| `QBOOT_SEC` | SECURE, public key | after `SIGN` | `ACK 0x84` (`ACK_SIGN`) |
 
-That string is a compile-time literal inside the image, so the host extracts it
-before the transfer (`FirmwareImage.expected_stamp`) and requires the device to
-print exactly that. A leftover banner from the previous firmware, or a device
-that refused the write and restarted the old APP, cannot be mistaken for success.
+SEALED and SEC differ only **after** the reset: SEALED compares the seal in
+~0.6 s, SECURE re-runs Ed25519 on every boot (~20 s). A verdict that waited
+for the new APP's `[QAPP] <name> V<ver>` stamp would therefore take 20 s on a
+SECURE build, and would fail outright on an APP that prints on another UART.
+`run()` reports completion at the commit evidence and never waits for a reboot.
+
+`ACK 0x83` alone is **not** a completion code: on a keyed build `END` only
+acknowledges and waits for `SIGN`. The host tells the two cases apart with the
+pre-reset announcement, which QBOOT prints only after `done=1`. Both the
+current banner (`[QIAP] flash complete...`) and the older `[QIAP] success...`
+spelling are recognised, so this host works with either QBOOT version;
+`tools/verify_fixes.py` checks them against the firmware source when the Quilla
+tree is available next to this one.
+
+The `[QAPP]` stamp is a **non-fatal post-confirmation**: `run()` peeks for
+0.5 s at bytes that arrived alongside the completion code (matched against
+`FirmwareImage.expected_stamp`, so a stale banner from the old firmware is not
+mistaken for the new one) and then returns. That window is shorter than every
+boot path; it never waits for the reboot.
 
 Two things follow from the firmware's commit rules, and both used to be wrong
 here:
 
-**END can end the conversation.** With no public key provisioned, the END
-handler commits, QBOOT prints `[QIAP] success. Rebooting...` and resets. The
+**END can end the conversation.** On `QBOOT_CHECK` the END handler commits,
+QBOOT prints `[QIAP] flash complete. Rebooting into APP...` and resets. The
 tool used to send `SIGN` regardless, wait `SIGN_TIMEOUT` (90 s) for an ACK that
 the APP shell would never produce, and then report a failed upgrade on a board
 that was already running the new firmware. `end()` now listens for the commit
@@ -251,9 +272,12 @@ mean one erase per page instead of one per six frames. The arithmetic estimate i
 so the estimate is conservative. The "64-byte NORMAL DMA" limit cited by older
 docs described firmware that no longer exists.
 
-If the port drops during the reset (composite debug probes: WCH-Link, J-Link),
-the tool re-opens it once and keeps waiting for the stamp instead of declaring
-failure. A dead port is never treated as success.
+If the reset drops the port (composite debug probes: WCH-Link, J-Link), the
+tool records the reset as **weak** completion evidence: the reset does follow
+`done=1`, but a cable pull looks identical, so the log says so explicitly and
+asks the operator to re-check the board. This is the only path where the
+verdict does not rest on a QBOOT-side completion code. A still-live port with
+no completion ACK, no announcement and no boot stamp is reported as a failure.
 
 ## What is not in this repository
 
@@ -307,7 +331,7 @@ regression is covered end to end instead of only unit by unit.
 ## Verified against
 
 - CRC16 and frame encoding: byte-identical to `os/lib/crc16.c` /
-  `quilla_host_upgrader.py`, checked over random payloads.
+  `quilla_host_updater.py`, checked over random payloads.
 - Ed25519: RFC 8032 section 7.1 vectors, plus signatures byte-identical to
   `tools/quilla_ed25519_sign.py` for a real 16.5 KiB QAPP image.
 - `.quilla_secver`: parses `magic="QAV1"` + version out of a real PY32F040xB

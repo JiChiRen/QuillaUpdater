@@ -98,29 +98,36 @@ host                                    device
  |                                        |
  |  END(total_len, total_crc)             |
  |--------------------------------------->|  verifies chained CRC and length
- |<--------------------------------- 0x83 |  commits + resets  (no public key)
- |                                        |  only ACKs       (public key present)
+ |<--------------------------------- 0x83 |  QBOOT_CHECK: commits + resets
+ |                                        |  SEALED/SEC: only ACKs, waits for SIGN
  |  SIGN(signature)                       |
  |--------------------------------------->|  SHA-256 + Ed25519, inline
  |<--------------------------------- 0x84 |  commits, writes APP flag, resets
  |                                        |
+ |  === completion verdict, all variants ===|  before the reset
  |  ... device reboots ...                |
- |<------ "[QAPP] <name> V<ver>" ---------|  the actual success criterion
+ |<------ "[QAPP] <name> V<ver>" ---------|  optional, non-fatal post-confirmation
 ```
 
-`END` behaves differently depending on what is flashed on the device:
+`END` behaves differently depending on the QBOOT build variant:
 
-* **No public key** (sealed/unlocked build): `END` commits and resets. `SIGN` is
-  never sent.
-* **Public key present** (secure build): `END` only acknowledges. The APP flag is
-  written and the MCU resets only after `SIGN` verifies. Skipping `SIGN` leaves
-  the upgrade uncommitted.
+* **QBOOT_CHECK** (CHECK mode, no public key): `END` commits and resets. `SIGN`
+  is never sent.
+* **QBOOT_SEALED / QBOOT_SEC** (SEALED / SECURE mode, public key): `END` only
+  acknowledges. The APP flag is written and the MCU resets only after `SIGN`
+  verifies. Skipping `SIGN` leaves the upgrade uncommitted.
+
+`commit_app()` runs before the completion ACK on both paths, so the host's
+verdict is available **before the reset** for all three variants. See section
+7.3 for why the boot stamp is not that verdict.
 
 The host cannot tell which case it is in from the protocol alone - there is no
 capability query - so it probes the device's behaviour instead: after `ACK 0x83`
-it listens briefly for `[QIAP] success. Rebooting...`, which QBOOT prints
-immediately before the commit reset. Seen → the device already committed, and
-`SIGN` is skipped. Not seen → the device is a KEY build waiting for the signature.
+it listens briefly for `[QIAP] flash complete. Rebooting into APP...` (older
+QBOOT builds print `[QIAP] success. Rebooting...`), which QBOOT emits only after
+`done=1`, immediately before the commit reset. Seen → the device already
+committed, and `SIGN` is skipped. Not seen → the device is a keyed build
+waiting for the signature.
 
 Sending `SIGN` to a device that already committed is not merely redundant: the
 APP shell does not speak QIAP, so no `ACK 0x84` can be produced and the host
@@ -262,19 +269,35 @@ bound rather than a measurement.
 * The UI must say so, otherwise the operator pulls the cable during a healthy
   upgrade. It names the phase without promising a fixed duration.
 
-### 7.3 Boot stamp wait
+### 7.3 Completion verdict and boot stamp
 
-After the commit reset the device re-runs its startup checks before the APP
-starts:
+The upgrade is reported complete **before the reset**, on QBOOT-side evidence:
+
+| Variant | Mode | Completion evidence |
+|---|---|---|
+| QBOOT_CHECK | CHECK (no key) | `ACK 0x83` + `[QIAP] flash complete...` |
+| QBOOT_SEALED | SEALED (key) | `ACK 0x84` after `SIGN` |
+| QBOOT_SEC | SECURE (key) | `ACK 0x84` after `SIGN` |
+
+A lost ACK can be covered by the commit announcement or by a matching `[QAPP]`
+stamp; a port lost to the reset is accepted as **weak** evidence and logged as
+such, because a cable pull is indistinguishable. With a still-live port and no
+evidence at all, the run fails.
+
+After the reset the device re-runs its startup checks before the APP starts:
 
 | Mode | Startup cost |
 |---|---|
+| CHECK | SHA-256 integrity check, ~0.1 s |
 | SEALED (default) | SHA-256 + seal compare, ~0.6 s |
 | SECURE | full Ed25519 verify, seconds to tens of seconds |
 
-This tool waits up to 45 s for `[QAPP] <name> V<ver>`. A timeout is a hard
-failure, never a silent pass: an ACK only proves a frame arrived, while the boot
-stamp proves the new image is actually running.
+Because these costs differ by two orders of magnitude, the host does **not**
+wait for any of them. It peeks for 0.5 s at bytes that arrived alongside the
+completion code; `[QAPP]` is recorded, matched against
+`FirmwareImage.expected_stamp`, and otherwise ignored. `wait_app_stamp()` (45 s)
+remains available for callers that explicitly want to watch the new firmware
+boot, but it is not part of `run()`'s verdict.
 
 ## 8. What this tool does not do
 

@@ -57,37 +57,55 @@ detection reliable. In state D the binary ENTER frame still reaches the state
 machine even though text commands are swallowed, so ENTER is always tried
 before assuming the board is in the APP.
 
-Success is *not* the ACK. The ACK only proves the frame arrived. Success is the
-new APP printing its boot stamp `[QAPP] <name> V<ver>`, which is checked by
-wait_app_stamp(); a timeout there is a hard failure, never a silent pass.
-Because the image contains that string verbatim (image.FirmwareImage.
-expected_stamp), the stamp is matched against the firmware that was actually
-written, not just any `[QAPP]` line that happens to be in the buffer.
+Completion is decided BEFORE the reset, on QBOOT-side evidence
+--------------------------------------------------------------
+QIAP calls commit_app() (app_page_commit() -> flag=APP1 -> done=1) before it
+sends its completion ACK, so the ACK that follows a commit is a completion
+code, not merely "the frame arrived". All three QBOOT build variants reach a
+commit before qboot_qiap_run() reboots, and all three can therefore be reported
+complete without waiting for the new APP to boot:
+
+  QBOOT_CHECK  (CHECK mode,  no public key)
+      END commits -> ACK_END 0x83 -> `[QIAP] flash complete ...` -> reset
+  QBOOT_SEALED (SEALED mode, public key)
+      END ACKs only -> SIGN verifies -> commit -> ACK_SIGN 0x84 -> reset
+  QBOOT_SEC    (SECURE mode, public key)
+      same as SEALED; only the POST-reset boot policy differs (~20 s Ed25519)
+
+The differences between the variants are all *after* the reset. A verdict that
+depended on the `[QAPP]` boot stamp would take 0.6 s on SEALED and ~20 s on
+SECURE, and would fail outright on an APP that prints on another UART. So the
+stamp is a non-fatal post-confirmation only; run() reports completion at the
+post-commit ACK (or the commit announcement) and never waits for a reboot.
+
+Completion evidence, strongest first:
+  * ACK_SIGN 0x84                    - keyed variants, after commit_app()
+  * ACK_END 0x83 + commit announce  - CHECK variant, END committed
+  * commit announcement alone       - ACK lost, done=1 still observed
+  * matching [QAPP] boot stamp      - arrives only after the reset
+  * port lost to the reset          - WEAK: the reset follows done=1, but a
+                                      cable pull looks the same. Logged as weak
+                                      so the operator can re-check the board.
 
 Why END can be the end of the conversation
 ------------------------------------------
-QIAP commits inside END when the device has no public key provisioned: the END
-handler commits, qboot_qiap_run() sees `quilla_qiap_is_done()`, prints
-`[QIAP] success. Rebooting...` and resets. Sending SIGN after that lands in the
-APP's shell, which does not speak QIAP, so no ACK 0x84 ever comes back - the host
-sits there for the whole SIGN_TIMEOUT while the board is already running the new
-firmware. That is exactly the reported symptom.
+With no public key provisioned, the END handler commits, qboot_qiap_run() sees
+`quilla_qiap_is_done()` and prints `[QIAP] flash complete. Rebooting into APP...`
+before resetting. Sending SIGN after that lands in the APP's shell, which does
+not speak QIAP, so no ACK 0x84 can ever come back. end() therefore listens for
+the announcement and run() skips SIGN when it was seen. The receive path keeps
+the raw byte stream alongside frame parsing, because these one-shot banners
+travel through the same port as the ACK frames and must not be consumed by the
+frame parser while it waits.
 
-So end() watches for the commit announcement, and run() skips SIGN when it was
-seen. Independently, the receive path keeps the raw byte stream alongside frame
-parsing: the one-shot banners travel through the same port as the ACK frames and
-must not be destroyed by the frame parser while it waits.
-
-Why SIGN does not wait for ACK 0x84 exclusively
------------------------------------------------
+Why SIGN does not insist on receiving ACK 0x84
+----------------------------------------------
 On a composite debug probe (WCH-Link, J-Link) the MCU reset that follows a
-successful SIGN pulls the whole USB device - and therefore the COM port - off the
-bus for a moment. The device sends ACK 0x84 and then resets, and the ACK is
-routinely lost in the re-enumeration. Waiting the full SIGN_TIMEOUT for that ACK
-would declare a perfectly good upgrade "failed" while the board is already in
-the new APP. So sign() treats a missing ACK as "will be confirmed by the boot
-stamp" and only an explicit NAK as a hard reject; wait_app_stamp() is the real
-authority and tolerates the port dropping during the reset.
+successful SIGN pulls the whole USB device off the bus for a moment. The device
+sends ACK 0x84 and then resets, and the ACK is routinely lost in the
+re-enumeration. sign() watches the commit announcement and the boot stamp in the
+same window, so a lost ACK still leaves two independent ways to confirm the
+commit; only an explicit NAK is a hard reject.
 """
 
 import struct
@@ -102,16 +120,22 @@ from .image import BOOT_STAMP_MARKER
 __all__ = [
     "UpgradeError", "UpgradeCancelled", "PortOpenError", "Session", "Progress",
     "Result", "classify_open_error", "describe_open_error",
-    "ACK_TIMEOUT", "SIGN_TIMEOUT", "APP_STAMP_TIMEOUT", "MAX_RETRIES",
+    "ACK_TIMEOUT", "SIGN_TIMEOUT", "APP_STAMP_TIMEOUT", "POST_CONFIRM_TIMEOUT",
+    "MAX_RETRIES",
 ]
 
 #: Per-frame ACK timeout.
 ACK_TIMEOUT = 2.0
 #: SIGN ACK timeout. Must exceed the device's ~20.6 s inline verification.
 SIGN_TIMEOUT = 90.0
-#: Wait for the new APP's boot stamp after the upgrade reset. SECURE builds
-#: re-verify Ed25519 on every boot (~20 s), so this is generous on purpose.
+#: Wait for the new APP's boot stamp after the upgrade reset. Kept for callers
+#: that explicitly ask for it (wait_app_stamp()); the normal run no longer waits
+#: for a reboot at all, because SECURE builds take ~20 s to reach the APP.
 APP_STAMP_TIMEOUT = 45.0
+#: Best-effort peek for a stamp that arrived in the same USB packet as the
+#: completion code. Deliberately shorter than any boot path (CHECK ~0.1 s,
+#: SEALED ~0.6 s, SECURE ~20 s): this never waits for the device to reboot.
+POST_CONFIRM_TIMEOUT = 0.5
 #: Retransmits on timeout or a CRC NAK.
 MAX_RETRIES = 3
 
@@ -127,7 +151,16 @@ _WRITE_DELAY = 0.012
 
 #: Printed by qboot_qiap_run() immediately before the reset that follows a
 #: commit. Seeing it means the device already has the new image and is leaving.
-_MARK_COMMIT = b"[QIAP] success"
+#: Both spellings are accepted because the QBOOT banner was renamed; keeping
+#: the old one means a host built from this tree still works with an older
+#: QBOOT. tools/verify_fixes.py checks these against the firmware source.
+_MARK_COMMITS = (b"[QIAP] flash complete", b"[QIAP] success")
+
+
+def _has_commit_mark(raw):
+    """True when `raw` carries QBOOT's pre-reset commit announcement."""
+    return any(mark in raw for mark in _MARK_COMMITS)
+
 
 #: How long end() listens for that announcement before deciding the device is
 #: waiting for a SIGN frame. The print happens microseconds after the END ACK,
@@ -291,9 +324,17 @@ class Session(object):
         self._raw = bytearray()
         #: The boot stamp this run must see, taken from the image being written.
         self.expected_stamp = None
-        #: True once the device announced the QIAP commit inside END, i.e. it
-        #: already reset into the new APP and a SIGN frame would go nowhere.
+        #: True once QBOOT-side evidence proves the image is committed: the
+        #: post-commit ACK, the pre-reset announcement, or a matching boot
+        #: stamp. When set, a SIGN frame would go nowhere.
         self.committed_at_end = False
+        #: Short description of the evidence behind the completion verdict, for
+        #: the log and the success dialog. None until one is seen.
+        self.completion_code = None
+        #: True when the verdict rests only on a port lost to the reset. The
+        #: reset does follow done=1, but a cable pull looks identical, so this
+        #: is reported as a weak verdict instead of a clean one.
+        self.completion_is_weak = False
 
         # Partition bounds: APP_START is MCU-independent, APP_END is fetched
         # from the device (it depends on SOC_FLASH_END) and must never be
@@ -575,7 +616,7 @@ class Session(object):
         the log for whoever looks next - no second byte has to arrive for it to
         be noticed.
         """
-        if watch_commit and _MARK_COMMIT in self._raw:
+        if watch_commit and _has_commit_mark(self._raw):
             return "commit", None
         if watch_stamp:
             stamp = self._find_stamp(self.expected_stamp)
@@ -593,7 +634,7 @@ class Session(object):
                         frame = self._parser.feed(b)
                         if frame is not None:
                             return "frame", frame
-                if watch_commit and _MARK_COMMIT in self._raw:
+                if watch_commit and _has_commit_mark(self._raw):
                     return "commit", None
                 if watch_stamp:
                     stamp = self._find_stamp(self.expected_stamp)
@@ -903,7 +944,10 @@ class Session(object):
         kind, _ = self._await(_COMMIT_PROBE_TIMEOUT, want_frame=False,
                               watch_commit=True)
         if kind == "commit":
+            # QBOOT_CHECK: END committed (quilla-qboot-secure.c reports no
+            # public key), and the announcement is printed after done=1.
             self.committed_at_end = True
+            self.completion_code = "ACK_END 0x83 + commit announcement"
             self._log("info", i18n.t("sess.end_committed"))
 
     def sign(self, image):
@@ -913,12 +957,13 @@ class Session(object):
         retransmit would make it verify twice and desync the state machine.
 
         Returns the boot stamp when the wait happened to observe it, else None.
-        Success is not gated on ACK 0x84 here - see the module docstring: on a
-        composite probe the reset that follows the ACK drops the port, and the
-        boot stamp is the real authority. While waiting, the commit
-        announcement and the boot stamp are watched as well: on a device that
-        committed at END they arrive instead of the ACK, and returning as soon
-        as one is seen is what turns a 90 s hang into a clean finish.
+        ACK 0x84 is the completion code for the keyed variants (SEALED / SECURE):
+        commit_app() runs before send_ack(), so receiving it means the image is
+        committed. The commit announcement and a matching boot stamp are watched
+        in the same window, so a lost ACK on a composite probe still leaves two
+        independent ways to confirm the commit. Only an explicit NAK is a hard
+        reject. Every positive branch records completion evidence; run() then
+        decides the verdict before the device finishes rebooting.
         """
         if self.committed_at_end:
             self._log("info", i18n.t("sess.sign_skipped_committed"))
@@ -937,17 +982,28 @@ class Session(object):
         kind, value = self._await(SIGN_TIMEOUT, watch_commit=True,
                                   watch_stamp=True)
         if kind == "stamp":
+            # The device already committed, reset and booted the new image.
+            # This is stronger than an ACK, so it must not be discarded: the
+            # old code returned here without recording any completion evidence
+            # and run() then reported a hard failure on a finished upgrade.
+            self.committed_at_end = True
+            self.completion_code = "matching [QAPP] boot stamp"
             self._log("ok", i18n.t("sess.stamp_found", stamp=value))
             return value
         if kind == "commit":
-            # Signature either was not needed (no key on the device) or was
-            # accepted; either way the device is rebooting into the new APP.
+            # ACK 0x84 was lost (composite probe) but done=1 was announced.
             self.committed_at_end = True
+            self.completion_code = "commit announcement"
             self._log("info", i18n.t("sess.end_committed"))
             return None
         if kind is None:
             if self.port_lost:
-                self._log("info", i18n.t("sess.sign_no_ack_reset"))
+                # WEAK evidence: the reset follows done=1, but a cable pull
+                # looks the same. Keep the verdict, flag it for the operator.
+                self.committed_at_end = True
+                self.completion_code = "reset (port lost, weak evidence)"
+                self.completion_is_weak = True
+                self._log("warn", i18n.t("sess.sign_no_ack_reset"))
             else:
                 self._log("warn", i18n.t("sess.sign_no_ack_alive", timeout=SIGN_TIMEOUT))
             return None
@@ -957,6 +1013,9 @@ class Session(object):
             status = rpayload[0] if rpayload else 0
             if status != 0:
                 raise UpgradeError(i18n.t("sess.err_sign_status", status=status))
+            # 0x84 is sent only after commit_app(): this is the completion code.
+            self.committed_at_end = True
+            self.completion_code = "ACK_SIGN 0x84"
             self._log("ok", i18n.t("sess.sign_accepted"))
             return None
         if rcmd in P.NAK_CMDS:
@@ -966,19 +1025,25 @@ class Session(object):
                                       reason=reason, txt=txt))
         raise UpgradeError(i18n.t("sess.sign_unexpected", cmd=rcmd))
 
-    def wait_app_stamp(self, timeout=APP_STAMP_TIMEOUT):
-        """Wait for the new APP's boot stamp; this is the success criterion.
+    def wait_app_stamp(self, timeout=APP_STAMP_TIMEOUT, allow_reopen=True,
+                       quiet=False):
+        """Look for the new APP's boot stamp. Not a success criterion.
 
-        A stamp already sitting in the raw log is returned immediately: it very
-        often arrives during the SIGN wait, i.e. before this method is even
-        called, and discarding it was the reason a completed upgrade could still
-        be reported as a timeout.
+        QIAP commits before it ACKs, so run() decides completion on QBOOT-side
+        evidence and never calls this as a gate. It remains available for
+        callers that explicitly want to watch the new firmware boot; the normal
+        path only uses _post_confirm(), which swallows every failure.
 
-        SIGN makes the device reset, so on a composite probe the port may be
-        gone by the time we get here - the same trap as swqboot. Re-open once if
-        the handle dies, but never treat a dead port as success.
+        A stamp already sitting in the raw log is returned immediately. SIGN
+        makes the device reset, so on a composite probe the port may be gone -
+        re-open once if the handle dies and `allow_reopen` is set. The short
+        non-fatal peek disables that: a 20 s re-open would defeat the point of
+        reporting completion before the reboot. `quiet` suppresses the phase
+        and tick logs for that same peek - completion has already been
+        announced, so a late VERIFY phase would make the UI flicker backwards.
         """
-        self.on_progress(Progress.VERIFY, 0, 0)
+        if not quiet:
+            self.on_progress(Progress.VERIFY, 0, 0)
 
         stamp = self._find_stamp(self.expected_stamp)
         if stamp is not None:
@@ -996,7 +1061,7 @@ class Session(object):
             if stamp is not None:
                 self._log("ok", i18n.t("sess.stamp_found", stamp=stamp))
                 return stamp
-            if self.port_lost and not reopened:
+            if self.port_lost and not reopened and allow_reopen:
                 reopened = True
                 self._log("info", i18n.t("sess.port_dropped_stamp"))
                 if not self.reopen(timeout=20.0):
@@ -1006,12 +1071,29 @@ class Session(object):
                 continue
             elapsed = time.time() - t0
             tick = int(elapsed // 5.0)
-            if tick != last_tick:
+            if not quiet and tick != last_tick:
                 last_tick = tick
                 self._log("info", i18n.t("sess.wait_stamp_tick", elapsed=elapsed,
                                          timeout=timeout))
             time.sleep(0.02)
         raise UpgradeError(i18n.t("sess.err_stamp_timeout", timeout=timeout))
+
+    def _post_confirm(self, ack_text):
+        """Non-blocking peek for a boot stamp that arrived with the completion.
+
+        The verdict is already made before this runs. The window is shorter than
+        every boot path (CHECK ~0.1 s, SEALED ~0.6 s, SECURE ~20 s), so this
+        never waits for the device to reboot: a stamp is recorded when it
+        happens to share the USB packet with the completion code, and its
+        absence is informational, never a warning and never a failure.
+        """
+        try:
+            return self.wait_app_stamp(timeout=POST_CONFIRM_TIMEOUT,
+                                       allow_reopen=False, quiet=True)
+        except UpgradeCancelled:
+            raise
+        except UpgradeError:
+            return i18n.t("sess.completion_no_stamp", ack=ack_text)
 
     # ------------------------------------------------------------------- run
     def run(self, image):
@@ -1073,11 +1155,26 @@ class Session(object):
                 # END acknowledges without committing only when the device has
                 # a public key burned (doc/upgrade-flow.md section 10): no flag
                 # write, no reset, and an unsigned host has nothing left to
-                # send. Waiting out the 45 s stamp window would end in "no boot
-                # stamp" and make a missing private key look like a bad image.
+                # send. Without a SIGN frame there is no completion code, so
+                # this is still a hard failure - do not paper over it.
                 raise UpgradeError(i18n.t("sess.err_key_needed"))
-            if stamp is None:
-                stamp = self.wait_app_stamp()
+
+            # Verdict BEFORE the reset. QBOOT_CHECK commits inside END
+            # (ACK 0x83 + announcement); SEALED / SECURE commit inside SIGN
+            # (ACK 0x84). All three are settled here, while QBOOT is still
+            # alive - the boot policy differences are entirely after the reset.
+            if not (self.committed_at_end or self.port_lost):
+                raise UpgradeError(i18n.t("sess.err_no_commit_ack"))
+            if self.completion_code is None:
+                # No ACK, no announcement, no stamp: only a port lost during
+                # the END probe. Keep it as a verdict, but label it weak.
+                self.completion_code = "reset (port lost, weak evidence)"
+                self.completion_is_weak = True
+            ack_text = self.completion_code
+            self._log("ok", i18n.t("sess.ack_complete", ack=ack_text))
+            if self.completion_is_weak:
+                self._log("warn", i18n.t("sess.completion_weak"))
+
             elapsed = time.time() - t_start
             self.on_progress(Progress.DONE, image.size, image.size)
             self._log("ok", i18n.t("sess.upgrade_finished",
@@ -1086,6 +1183,11 @@ class Session(object):
                                    speed=(total_len / 1024.0)
                                    / max(write_elapsed, 1e-6),
                                    elapsed=elapsed))
+            # Optional, non-blocking peek. It cannot change the verdict, and
+            # its 0.5 s window finishes long before any of the three boot
+            # paths would print a [QAPP] banner.
+            if stamp is None:
+                stamp = self._post_confirm(ack_text)
             return Result(stamp, elapsed, total_len, self.seed is not None,
                           write_elapsed)
         finally:

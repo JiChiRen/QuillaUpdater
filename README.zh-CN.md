@@ -15,7 +15,7 @@
 
 协议就是 QBOOT 本身已经在说的一套（见 [docs/protocol.md](docs/protocol.md)，
 [中文版](docs/protocol.zh-CN.md)）；本项目补齐的是它外面缺失的那层窗口。它由
-[Quilla](https://github.com/JiChiRen/Quilla) 代码树中的 `tools/quilla_host_upgrader.py`
+[Quilla](https://github.com/JiChiRen/Quilla) 代码树中的 `tools/quilla_host_updater.py`
 重新实现并扩展而来，增加了图形界面、可协作取消的流程，以及在开始写 Flash 之前就能
 拦下注定失败升级的预检查。
 
@@ -39,7 +39,7 @@
 - **如实反映进度** —— 长时间静默的阶段会被明确标注。`SIGN` 阶段设备在片内验签、链路没有
   任何输出，界面会点名该阶段并提示「请勿断电」，而不是看起来像卡死。
 - **可协作取消** —— 在当前帧结束后停止，板卡保持可恢复状态（QIAP 标志保留，重新运行即可继续）。
-- **以真实运行结果判定成功** —— 等待新固件打印 `[QAPP] ... V<ver>` 启动戳。收到 ACK 不算成功。
+- **重启之前即判定完成** —— QIAP 先提交再回 ACK，因此 CHECK、SEALED、SECURE 三种构建都依据 QBOOT 侧的证据宣布完成；不再等待可能长达 20 秒的启动戳，也不依赖 APP 从哪个串口打印。
 - **记住上次配置** —— 固件路径、私钥路径、串口与波特率在重启后仍然保留，第二次升级只需一次点击。
 - **中英双语界面** —— 可在顶栏运行时切换，也可按系统语言自动选择。命令行沿用同一设置，
   并支持 `--lang` 覆盖。
@@ -180,21 +180,35 @@ QBOOT 的宏：
 
 ## 成功如何判定
 
-ACK 不是结论。`ACK 0x83` / `ACK 0x84` 只能证明某一帧到达了设备；真正的结论是新 APP
-打印出它那一次性的启动戳：
+结论在**重启之前**就已得出，依据是 QBOOT 侧的证据。QIAP 在 `commit_app()`
+（`app_page_commit()` → `flag=APP1` → `done=1`）**之后**才发送完成 ACK，因此该 ACK
+是完成码，而不只是「帧已到达」。三种 QBOOT 构建都在 `qboot_qiap_run()` 复位之前完成提交：
 
-```
-[QAPP] Project V0.10.0001
-```
+| 构建 | 启动模式 | 提交点 | 完成证据 |
+|---|---|---|---|
+| `QBOOT_CHECK` | CHECK，无公钥 | `END` 内 | `ACK 0x83` + `[QIAP] flash complete. Rebooting into APP...` |
+| `QBOOT_SEALED` | SEALED，有公钥 | `SIGN` 之后 | `ACK 0x84`（`ACK_SIGN`） |
+| `QBOOT_SEC` | SECURE，有公钥 | `SIGN` 之后 | `ACK 0x84`（`ACK_SIGN`） |
 
-该字符串是镜像内的编译期字面量，因此主机在传输前就把它提取出来
-（`FirmwareImage.expected_stamp`），并要求设备打印的内容与之完全一致。旧固件残留的 banner，
-或者拒绝了写入、重新启动了旧 APP 的设备，都无法被误判为成功。
+SEALED 与 SEC 的差别**只在复位之后**：SEALED 比对封印约 0.6 秒，SECURE 每次上电都跑
+一遍 Ed25519（约 20 秒）。若把新 APP 的 `[QAPP] <name> V<ver>` 启动戳当作判据，SECURE
+构建就要多等 20 秒，而 APP 从另一个串口打印时更会直接误判失败。`run()` 在拿到提交证据时
+即宣布完成，不等待重启。
+
+单独的 `ACK 0x83` **不是**完成码：带公钥的构建在 `END` 只确认、不提交，仍要等 `SIGN`。
+主机靠复位前公告区分这两种情况 —— 该公告只在 `done=1` 之后打印。当前文案
+（`[QIAP] flash complete...`）与旧版（`[QIAP] success...`）都能识别，因此本工具对两种
+QBOOT 版本都可用；`tools/verify_fixes.py` 会在 Quilla 源码树存在时，把这两个标记与固件
+源码逐一核对。
+
+`[QAPP]` 启动戳降级为**非致命后置确认**：`run()` 只对随完成码一同到达的字节做 0.5 秒
+窥视（仍与 `FirmwareImage.expected_stamp` 比对，避免把旧固件残留 banner 当成新镜像），
+随后即返回。该窗口短于任何一种启动路径，不会等待重启。
 
 固件的提交规则带来两个推论，而这两点在本工具中此前都是错的：
 
-**END 有可能直接结束整个流程。** 当设备未配置公钥时，END 处理函数即完成提交，QBOOT 打印
-`[QIAP] success. Rebooting...` 并复位。工具过去在这种情况下仍照常发送 `SIGN`，为 APP shell
+**END 有可能直接结束整个流程。** 在 `QBOOT_CHECK` 上，END 处理函数即完成提交，QBOOT 打印
+`[QIAP] flash complete. Rebooting into APP...` 并复位。工具过去在这种情况下仍照常发送 `SIGN`，为 APP shell
 根本不可能产生的 ACK 空等 `SIGN_TIMEOUT`（90 秒），最后在一块已经在运行新固件的板卡上报告
 升级失败。现在 `end()` 会监听提交公告，一旦收到就跳过 `SIGN`。
 
@@ -215,8 +229,10 @@ DMA 环，其后是 512 字节桥接环，加上 `PAGE_SIZE + 8` 的负载缓冲
 实测 15.3 KiB 镜像约 2 秒传完（约 7.7 KiB/s），说明该估计偏保守。旧文档中「64 字节 NORMAL
 DMA」的限制描述的是已不存在的固件版本。
 
-若复位期间端口掉线（WCH-Link、J-Link 这类复合调试探针），工具会重开一次端口并继续等待
-启动戳，而不是直接判定失败。端口彻底失联永远不会被当作成功。
+若复位导致端口掉线（WCH-Link、J-Link 这类复合调试探针），工具把它记为**弱证据**：复位
+确实只发生在 `done=1` 之后，但拔线与复位的表现完全相同，因此日志会明确标注并提示复核板卡。
+这是唯一一条不依赖 QBOOT 侧完成码的路径。若端口仍然活着，却既没有完成 ACK、没有提交公告、
+也没有启动戳，则判定为失败。
 
 ## 本仓库有意不包含的内容
 
@@ -263,7 +279,7 @@ python tools/verify_fixes.py                # 配置持久化、SIGN 语义、�
 
 ## 验证情况
 
-- CRC16 与帧编码：与 `os/lib/crc16.c` / `quilla_host_upgrader.py` 逐字节一致，已在随机负载上核对。
+- CRC16 与帧编码：与 `os/lib/crc16.c` / `quilla_host_updater.py` 逐字节一致，已在随机负载上核对。
 - Ed25519：RFC 8032 第 7.1 节测试向量；并对真实的 16.5 KiB QAPP 镜像，与
   `tools/quilla_ed25519_sign.py` 产出的签名逐字节一致。
 - `.quilla_secver`：能从真实的 PY32F040xB 构建产物中，于偏移 `0x400` 处解析出
