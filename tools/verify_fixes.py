@@ -379,6 +379,37 @@ def test_run_does_not_hang_when_end_commits():
     check("run.commit: under 10 s", took < 10.0, "%.1f s" % took)
 
 
+def test_no_key_with_public_key_names_the_real_cause():
+    """Device holds a public key and the host has no --key: END ACKs, no commit.
+
+    An uncommitted END cannot be finished without a private key, so the run
+    must stop right there and say why. The old path waited out the 45 s stamp
+    window and then reported "no boot stamp", blaming the image.
+    """
+    fake = _FakeBoard(key_on_device=True)
+    sess = Session("COM0")
+    sess.seed = None
+    sess._open = lambda: None
+    sess.close = lambda: None
+    sess._write_bytes = lambda data: (fake.write(data), True)[1]
+    sess._read_some = fake.read
+    sess.ensure_upgrade_mode = sess.enter
+
+    t0 = time.time()
+    err = None
+    try:
+        sess.run(FirmwareImage("<mem>", _FAKE_IMG))
+    except UpgradeError as e:
+        err = e
+    took = time.time() - t0
+
+    check("no-key: stops instead of waiting", err is not None, "returned normally")
+    check("no-key: names the missing --key",
+          err is not None and "--key" in str(err), err)
+    check("no-key: under 5 s", took < 5.0, "%.1f s" % took)
+    check("no-key: no SIGN sent", fake.sign_frames == 0, fake.sign_frames)
+
+
 def test_run_signs_on_key_device():
     """A KEY device ACKs END, then really does need the SIGN frame."""
     fake = _FakeBoard(key_on_device=True)
@@ -688,6 +719,7 @@ def main():
     test_banner_probe_keeps_window_once_data_starts()
     test_swqboot_clears_device_line_first()
     test_run_does_not_hang_when_end_commits()
+    test_no_key_with_public_key_names_the_real_cause()
     test_run_signs_on_key_device()
     test_boot_stamp_is_success_criterion()
     test_boot_stamp_timeout_is_failure()
