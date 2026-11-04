@@ -299,7 +299,11 @@ python tools/build_exe.py --icon q.ico
 
 ## 许可
 
-BSD-3-Clause，与所属的 Quilla 代码树同一条款：`LICENSE` 沿用 Quilla 的原文与版权方。
+BSD-3-Clause，版权方与条款和本工具所服务的 Quilla 项目一致。
 每个源文件同样带有许可证头，单个文件被取出到其他项目时条款随之保留。
-`quilla_updater/ed25519.py` 移植自 Quilla 的 `tools/quilla_ed25519_sign.py`，
+`quilla_updater/ed25519.py` 移植自 Quilla 自研的 `tools/quilla_ed25519_sign.py`，
 版权所有 (c) 2026 JiChiRen Info. Tech.，采用同一许可。
+
+本仓库不含 contiki-NG 派生代码。Quilla 代码树中包含此类代码，
+那些文件保留其原始许可（瑞典计算机科学研究所，SICS）。
+本项目的许可证头并不派生自它们，也不复述其条款。
