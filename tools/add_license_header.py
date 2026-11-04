@@ -30,11 +30,12 @@
 
 """Insert the BSD-3-Clause header into every Python source file.
 
-The wording mirrors the header Quilla's C/H sources carry
-(``os/services/quilla-qboot/quilla-qiap.c``), with one deliberate change: that
-header still says "the Institute" because it was inherited from Contiki and the
-disclaimer was never reworded when the copyright holder became a company. New
-files here say "the copyright holder" so the text matches the LICENSE file.
+The block layout follows the header Quilla's C/H sources carry, but the
+disclaimer names "the copyright holder" rather than "the Institute". Those C/H
+files are contiki-NG derivatives and must keep the original Swedish Institute
+of Computer Science wording - that is a licence obligation, not a leftover to
+be tidied up. This repository contains no contiki-NG code, so its header names
+the actual holder and agrees with LICENSE.
 
 The script is idempotent: a file that already carries the marker line is left
 alone, so it can be re-run after adding sources.
