@@ -1069,6 +1069,13 @@ class Session(object):
             stamp = None
             if self.seed is not None:
                 stamp = self.sign(image)
+            elif not self.committed_at_end and not self.port_lost:
+                # END acknowledges without committing only when the device has
+                # a public key burned (doc/upgrade-flow.md section 10): no flag
+                # write, no reset, and an unsigned host has nothing left to
+                # send. Waiting out the 45 s stamp window would end in "no boot
+                # stamp" and make a missing private key look like a bad image.
+                raise UpgradeError(i18n.t("sess.err_key_needed"))
             if stamp is None:
                 stamp = self.wait_app_stamp()
             elapsed = time.time() - t_start

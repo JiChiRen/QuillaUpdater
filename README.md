@@ -35,7 +35,9 @@ it costs you a minute.
 - **The board's state does not matter** - running firmware, QBOOT shell, or a
   leftover interrupted upgrade are all detected and handled.
 - **Signature is optional and explicit** - no key means no `SIGN` frame, and the
-  UI says so instead of failing 40 seconds later with `NAK 0x08`.
+  UI says so instead of failing 40 seconds later with `NAK 0x08`. If the device
+  does hold a public key, the run stops right after `END` and names the missing
+  key instead of waiting out the boot-stamp window.
 - **Pre-flight** - shows the image size, SHA-256, and the anti-rollback security
   version read straight out of the `.bin`, before anything is written.
 - **Honest progress** - the long silent stretches are labelled. During `SIGN` the

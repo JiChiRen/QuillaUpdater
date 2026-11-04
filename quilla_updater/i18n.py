@@ -295,6 +295,9 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.image_secver": "镜像安全版本 = {ver} (0x{ver:X})",
     "sess.image_no_secver": "镜像无 .quilla_secver 段 - KEY 版 QBOOT 将以 VER(0x09) 拒绝。",
     "sess.image_too_big": "镜像 {size} B，超出可编程上限 {max} B（APP 区）。",
+    "sess.err_key_needed": (
+        "设备已烧录公钥，END 仅确认接收、未提交：本次升级必须提供 --key 签名私钥。"
+        "设备当前停留在升级状态（标志 QIAP），补齐私钥后可直接重跑。"),
 
     "sess.err_enter_status": "ENTER 返回状态={status}",
     "sess.ack_timeout": "等待 ACK 0x{cmd:02X} 超时（第 {attempt}/{retries} 次）",
@@ -615,6 +618,10 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.image_secver_en": "Image security version = {ver} (0x{ver:X})",
     "sess.image_no_secver_en": "Image has no .quilla_secver region - a KEY build will reject it with VER(0x09).",
     "sess.image_too_big_en": "Image is {size} B, above the programmable ceiling of {max} B (APP region).",
+    "sess.err_key_needed_en": (
+        "The device holds a public key, so END acknowledged without committing: "
+        "this upgrade needs a signing key (--key). The device is parked in the "
+        "upgrade state (flag QIAP); rerun with the key, no reset required."),
 
     "sess.err_enter_status_en": "ENTER returned status={status}",
     "sess.ack_timeout_en": "Timed out waiting for ACK 0x{cmd:02X} (attempt {attempt}/{retries})",
