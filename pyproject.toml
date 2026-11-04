@@ -32,7 +32,10 @@ quflash = "quilla_updater.cli:main"
 quflash-gui = "quilla_updater.gui:main"
 
 [project.urls]
-Homepage = "https://github.com/jichiren/quilla-updater"
+Homepage = "https://github.com/JiChiRen/QuillaUpdater"
+Repository = "https://github.com/JiChiRen/QuillaUpdater"
+Issues = "https://github.com/JiChiRen/QuillaUpdater/issues"
+Changelog = "https://github.com/JiChiRen/QuillaUpdater/releases"
 
 [tool.setuptools]
 packages = ["quilla_updater"]
