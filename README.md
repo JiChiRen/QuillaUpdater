@@ -47,7 +47,7 @@ it costs you a minute.
   (the QIAP flag stays set, so a re-run resumes).
 - **Completion before the reset** - QIAP commits before it ACKs, so CHECK,
   SEALED and SECURE builds are all reported complete on QBOOT-side evidence;
-  no 20 s boot-stamp wait and no dependence on which UART the APP prints on.
+  the verdict depends on neither the boot stamp nor the UART the APP prints on.
 - **Remembers your setup** - firmware path, key path, port and baud rate survive
   a restart, so a second upgrade is one click.
 - **Bilingual UI** - Chinese / English, switchable at runtime from the top bar,
@@ -232,7 +232,7 @@ spelling are recognised, so this host works with either QBOOT version;
 `tools/verify_fixes.py` checks them against the firmware source when the Quilla
 tree is available next to this one.
 
-The `[QAPP]` stamp is a **non-fatal post-confirmation**: `run()` peeks for
+The `[QAPP]` stamp is an **optional post-confirmation**: `run()` checks for
 0.5 s at bytes that arrived alongside the completion code (matched against
 `FirmwareImage.expected_stamp`, so a stale banner from the old firmware is not
 mistaken for the new one) and then returns. That window is shorter than every
