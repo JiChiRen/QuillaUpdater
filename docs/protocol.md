@@ -106,7 +106,7 @@ host                                    device
  |                                        |
  |  === completion verdict, all variants ===|  before the reset
  |  ... device reboots ...                |
- |<------ "[QAPP] <name> V<ver>" ---------|  optional, non-fatal post-confirmation
+ |<------ "[QAPP] <name> V<ver>" ---------|  optional post-confirmation
 ```
 
 `END` behaves differently depending on the QBOOT build variant:
@@ -293,7 +293,7 @@ After the reset the device re-runs its startup checks before the APP starts:
 | SECURE | full Ed25519 verify, seconds to tens of seconds |
 
 Because these costs differ by two orders of magnitude, the host does **not**
-wait for any of them. It peeks for 0.5 s at bytes that arrived alongside the
+wait for any of them. It checks for 0.5 s at bytes that arrived alongside the
 completion code; `[QAPP]` is recorded, matched against
 `FirmwareImage.expected_stamp`, and otherwise ignored. `wait_app_stamp()` (45 s)
 remains available for callers that explicitly want to watch the new firmware
