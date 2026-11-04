@@ -1,0 +1,19 @@
+# Keep the platform line endings honest so a Windows checkout and a Linux
+# checkout produce the same bytes for sources, and working scripts stay usable.
+* text=auto
+
+*.py    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.txt   text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Never let git touch these.
+*.ico   binary
+*.png   binary
+*.svg   text eol=lf
+*.exe   binary
+*.bin   binary
+*.hex   binary

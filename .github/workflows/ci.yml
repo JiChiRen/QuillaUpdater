@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Self-test (frame codec, CRC, Ed25519 vectors)
+        run: python -m quilla_updater.cli --self-test
+
+      - name: Translation table audit
+        run: python -m quilla_updater.cli --audit-i18n
+
+      - name: Regression suite (Linux, with a virtual display for the Tk smoke test)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          xvfb-run -a python tools/verify_fixes.py
+
+      - name: Regression suite (Windows)
+        if: runner.os == 'Windows'
+        run: python tools/verify_fixes.py

@@ -1,0 +1,35 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Packaging / build output
+build/
+dist/
+*.egg-info/
+.eggs/
+*.spec
+*.exe
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ---- secrets: never commit key material ----
+# The private half of a signing keypair. A leaked seed lets anyone sign an
+# image the device accepts, which defeats secure boot entirely.
+keys/
+*.hex
+
+# ---- firmware images are not part of this tool ----
+*.bin
+*.axf
+*.elf
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
