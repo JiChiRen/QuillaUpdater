@@ -349,5 +349,9 @@ unsigned.
 
 ## License
 
-BSD-3-Clause. `quilla_updater/ed25519.py` is ported from the Quilla tree,
-Copyright (c) 2026 JiChiRen Info. Tech., same license.
+BSD-3-Clause, the same terms as the Quilla tree it belongs to: `LICENSE`
+carries Quilla's exact text and copyright holder. Every source file carries the
+header as well, so a file lifted out of this tree keeps its terms.
+`quilla_updater/ed25519.py` is ported from Quilla's
+`tools/quilla_ed25519_sign.py`, Copyright (c) 2026 JiChiRen Info. Tech., same
+license.
