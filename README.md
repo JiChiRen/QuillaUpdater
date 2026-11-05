@@ -342,6 +342,13 @@ regression is covered end to end instead of only unit by unit.
   `[QAPP] Project V0.10.0001` was observed after the reset. An earlier run on a
   board with no public key also exercised the commit-during-`END` path that used
   to hang for 90 s.
+- Configurable APP-to-QBOOT reset command: both the default text command
+  `swqboot` and a raw hexadecimal command are verified. On a board running an
+  APP that does not expose the Quilla shell, sending `06 F0 5A 51 42 4F 54 80`
+  (the literal "QBOT" embedded) reset the MCU into the QBOOT shell, after
+  which a full signed upgrade completed. The hex path sends the bytes verbatim
+  with no trailing newline; the run confirmed this - the post-reset `part`
+  reply came back clean (`part\r\nqboot\r\n> `).
 
 What is still untested: MCUs other than PY32F040xB (the APP ceiling depends on
 their `pinfo` reply); the port-dropped-reopen path, which needs a probe that
