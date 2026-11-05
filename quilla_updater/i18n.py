@@ -135,10 +135,10 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.app_reset": "APP → QBOOT 复位指令",
     "gui.app_reset_use_hex": "使用十六进制指令",
     "gui.app_reset_text": "文本指令",
-    "gui.app_reset_hex": "十六进制（空格分隔，例如 06 F0 5A 51 42 4F 54 80）",
+    "gui.app_reset_hex": "十六进制（空格分隔，例如 06 F0 53 51 42 4F 54）",
     "gui.app_reset_hint": "默认发送 'swqboot\\n'（文本）。切到十六进制时按原样发送字节，不追加换行；需要换行请自行包含 0D 0A。",
     "gui.dlg_invalid_reset_title": "复位指令无效",
-    "gui.dlg_invalid_reset": "复位指令无效：{msg}\n示例：文本 'swqboot'，或十六进制 '06 F0 5A 51 42 4F 54 80'。",
+    "gui.dlg_invalid_reset": "复位指令无效：{msg}\n示例：文本 'swqboot'，或十六进制 '06 F0 53 51 42 4F 54'。",
 
     "gui.log": " 日志 ",
 
@@ -451,7 +451,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "cli.audit_help": "检查翻译表是否有缺漏",
     "cli.lang_help": "输出语言（默认沿用界面设置）",
     "cli.app_reset_help": "文本复位指令：让 APP 跳转到 QBOOT（默认 swqboot）",
-    "cli.app_reset_hex_help": "十六进制复位指令（空格分隔，如 '06 F0 5A 51 42 4F 54 80'）；指定后替代文本指令，按原样发送",
+    "cli.app_reset_hex_help": "十六进制复位指令（空格分隔，如 '06 F0 53 51 42 4F 54'）；指定后替代文本指令，按原样发送",
 
     # ===================== EN strings =====================    "gui.title_en": "Quilla Updater - QBOOT serial upgrade",
 
@@ -482,10 +482,10 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.app_reset_en": "APP → QBOOT reset command",
     "gui.app_reset_use_hex_en": "Use hexadecimal command",
     "gui.app_reset_text_en": "Text command",
-    "gui.app_reset_hex_en": "Hex (space-separated, e.g. 06 F0 5A 51 42 4F 54 80)",
+    "gui.app_reset_hex_en": "Hex (space-separated, e.g. 06 F0 53 51 42 4F 54)",
     "gui.app_reset_hint_en": "Sends 'swqboot\\n' (text) by default. In hex mode the bytes are sent verbatim - no newline is appended; include 0D 0A yourself if the firmware needs one.",
     "gui.dlg_invalid_reset_title_en": "Invalid reset command",
-    "gui.dlg_invalid_reset_en": "Invalid reset command: {msg}\nExamples: text 'swqboot', or hex '06 F0 5A 51 42 4F 54 80'.",
+    "gui.dlg_invalid_reset_en": "Invalid reset command: {msg}\nExamples: text 'swqboot', or hex '06 F0 53 51 42 4F 54'.",
 
     "gui.log_en": " Log ",
 
@@ -813,7 +813,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "cli.audit_help_en": "check the translation table for gaps",
     "cli.lang_help_en": "output language (default: the persisted UI setting)",
     "cli.app_reset_help_en": "Text reset command that makes the APP jump to QBOOT (default swqboot)",
-    "cli.app_reset_hex_help_en": "Hex reset command (space-separated, e.g. '06 F0 5A 51 42 4F 54 80'); overrides the text command and is sent verbatim",
+    "cli.app_reset_hex_help_en": "Hex reset command (space-separated, e.g. '06 F0 53 51 42 4F 54'); overrides the text command and is sent verbatim",
 
     "sess.enter_payload_en": "ENTER payload: app_start=0x{start:08X}",
 }
