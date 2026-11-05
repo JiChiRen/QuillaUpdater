@@ -289,7 +289,7 @@ def parse_app_reset_command(text, hex_str):
     text     : text command; sent as ``text + "\\n"`` (default "swqboot"). This
                is what the Quilla APP shell understands.
     hex_str  : when non-empty, raw hex bytes (space / comma / colon separated,
-               e.g. "06 F0 5A 51 42 4F 54 80"). Takes precedence over *text*
+               e.g. "06 F0 53 51 42 4F 54"). Takes precedence over *text*
                and is sent verbatim - no newline appended, because the target is
                an APP that does not run the Quilla shell and may speak a binary
                protocol where a stray CR/LF would be data rather than a frame
@@ -306,7 +306,7 @@ def parse_app_reset_command(text, hex_str):
         except ValueError:
             raise ValueError(
                 "malformed hex reset command %r: use pairs of hex digits, "
-                "e.g. '06 F0 5A 51 42 4F 54 80'" % hex_str)
+                "e.g. '06 F0 53 51 42 4F 54'" % hex_str)
         if not data:
             raise ValueError("hex reset command is empty")
         return (False, data)
@@ -875,7 +875,7 @@ class Session(object):
 
         The trigger is configurable (see parse_app_reset_command): the default
         text command "swqboot" targets the Quilla APP shell, and a raw hex
-        command (e.g. "06 F0 5A 51 42 4F 54 80") targets an APP that does not
+        command (e.g. "06 F0 53 51 42 4F 54") targets an APP that does not
         run that shell.
 
         The reset is the part that used to be wrong here: on a composite debug
