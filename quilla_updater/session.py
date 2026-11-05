@@ -283,6 +283,37 @@ def _noop(*_a, **_k):
     pass
 
 
+def parse_app_reset_command(text, hex_str):
+    """Resolve the APP -> QBOOT trigger into the bytes written on the wire.
+
+    text     : text command; sent as ``text + "\\n"`` (default "swqboot"). This
+               is what the Quilla APP shell understands.
+    hex_str  : when non-empty, raw hex bytes (space / comma / colon separated,
+               e.g. "06 F0 5A 51 42 4F 54 80"). Takes precedence over *text*
+               and is sent verbatim - no newline appended, because the target is
+               an APP that does not run the Quilla shell and may speak a binary
+               protocol where a stray CR/LF would be data rather than a frame
+               terminator.
+
+    Returns ``(is_text, payload)``. Raises ``ValueError`` on malformed hex.
+    """
+    h = (hex_str or "").strip()
+    if h:
+        cleaned = (h.replace(":", "").replace(",", "").replace(" ", "")
+                   .replace("\t", ""))
+        try:
+            data = bytes.fromhex(cleaned)
+        except ValueError:
+            raise ValueError(
+                "malformed hex reset command %r: use pairs of hex digits, "
+                "e.g. '06 F0 5A 51 42 4F 54 80'" % hex_str)
+        if not data:
+            raise ValueError("hex reset command is empty")
+        return (False, data)
+    t = (text or "swqboot").strip() or "swqboot"
+    return (True, (t + "\n").encode("utf-8"))
+
+
 class Session(object):
     """One upgrade run. Not reusable: construct a new one per attempt.
 
@@ -297,7 +328,8 @@ class Session(object):
 
     def __init__(self, port, baud=115200, key_path=None,
                  on_log=None, on_progress=None, cancel=None,
-                 banner_timeout=15.0):
+                 banner_timeout=15.0,
+                 reset_cmd="swqboot", reset_cmd_hex=None):
         self.port = port
         self.baud = int(baud)
         self.key_path = key_path
@@ -305,6 +337,17 @@ class Session(object):
         self.on_progress = on_progress or _noop
         self.cancel = cancel or (lambda: False)
         self.banner_timeout = banner_timeout
+
+        # APP -> QBOOT trigger. Defaults to the Quilla APP-shell command
+        # "swqboot"; a raw hex command can be supplied for APPs that do not run
+        # that shell. _app_reset_desc is the human-readable form for logs.
+        self._app_reset_is_text, self._app_reset_bytes = parse_app_reset_command(
+            reset_cmd, reset_cmd_hex)
+        if reset_cmd_hex and reset_cmd_hex.strip():
+            self._app_reset_desc = "%s (%d B)" % (
+                reset_cmd_hex.strip(), len(self._app_reset_bytes))
+        else:
+            self._app_reset_desc = reset_cmd or "swqboot"
 
         self.ser = None
         self.seed = None
@@ -774,7 +817,8 @@ class Session(object):
             #      below before wasting three 2 s ACK timeouts on an ENTER that
             #      cannot possibly be parsed by a text shell.
             if part_txt.strip():
-                self._log("info", i18n.t("sess.app_shell_reset"))
+                self._log("info", i18n.t("sess.app_shell_reset",
+                                         cmd=self._app_reset_desc))
                 self._reset_into_qboot()
             else:
                 self._log("info", i18n.t("sess.not_qboot_try_enter"))
@@ -827,7 +871,12 @@ class Session(object):
         time.sleep(0.1)
 
     def _reset_into_qboot(self):
-        """'swqboot' -> MCU resets -> QBOOT shell.
+        """Issue the APP -> QBOOT trigger, then confirm we landed in QBOOT.
+
+        The trigger is configurable (see parse_app_reset_command): the default
+        text command "swqboot" targets the Quilla APP shell, and a raw hex
+        command (e.g. "06 F0 5A 51 42 4F 54 80") targets an APP that does not
+        run that shell.
 
         The reset is the part that used to be wrong here: on a composite debug
         probe (WCH-Link, J-Link with a CDC channel) the MCU reset pulls the whole
@@ -835,19 +884,23 @@ class Session(object):
         then re-enumerates under the same name. The old code spent 6 s waiting
         for a "[BOOT]" banner on a handle that was already dead, so it could
         never see one - that is why every run ended in "qiap did not enter
-        upgrade mode" even though swqboot had worked.
+        upgrade mode" even though the reset had worked.
 
         So: write the command, notice the device is gone, wait for it to come
         back, then ask the board which shell it is in. 'part' survives the
         re-enumeration; a banner does not.
         """
+        desc = self._app_reset_desc
         for attempt in (1, 2):
             self._check_cancel()
-            self._log("info", i18n.t("sess.swqboot_attempt", n=attempt))
-            # A failed binary ENTER may have left an unterminated line behind,
-            # and the shell would swallow the command as part of it.
-            self._clear_device_line()
-            wrote = self._write_bytes(b"swqboot\n")
+            self._log("info", i18n.t("sess.swqboot_attempt", n=attempt, cmd=desc))
+            # A failed binary ENTER may have left an unterminated line in a text
+            # shell, and the shell would swallow the command as part of it. That
+            # clear is meaningless (and potentially harmful) for a raw hex
+            # trigger aimed at a binary protocol, so only do it in text mode.
+            if self._app_reset_is_text:
+                self._clear_device_line()
+            wrote = self._write_bytes(self._app_reset_bytes)
 
             # Give the MCU time to actually reset, then look at the port. The
             # read is what detects a dead handle, so it has to be attempted
@@ -860,7 +913,7 @@ class Session(object):
                                          timeout=20.0))
                 if not self.reopen(timeout=20.0):
                     raise PortOpenError(
-                        i18n.t("sess.err_swqboot_fail"), kind="not_found",
+                        i18n.t("sess.err_swqboot_fail", cmd=desc), kind="not_found",
                         port=self.port)
 
             banner = self._drain_text(1.5)
@@ -878,7 +931,7 @@ class Session(object):
                 self._log("ok", i18n.t("sess.board_qboot"))
                 return
             if "app1" in txt:
-                self._log("warn", i18n.t("sess.still_app", n=attempt))
+                self._log("warn", i18n.t("sess.still_app", n=attempt, cmd=desc))
                 continue
             if not txt.strip() and not banner:
                 self._log("warn", i18n.t("sess.no_echo_assume"))
@@ -886,7 +939,7 @@ class Session(object):
                 self._log("ok", i18n.t("sess.board_qboot"))
             return
 
-        raise UpgradeError(i18n.t("sess.err_swqboot_fail"))
+        raise UpgradeError(i18n.t("sess.err_swqboot_fail", cmd=desc))
 
     # -------------------------------------------------------------- commands
     def enter(self):

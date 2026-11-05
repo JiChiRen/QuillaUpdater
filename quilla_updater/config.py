@@ -54,6 +54,9 @@ DEFAULTS = {
     "lang": "auto",          # "auto" | "zh" | "en"
     "last_dir": "",          # last directory used by a file dialog
     "key_dir": "keys",       # last output directory on the key tool page
+    "app_reset": "swqboot",  # text command that makes the APP jump to QBOOT
+    "app_reset_hex": "",     # raw hex reset command (takes precedence); "" = off
+    "use_hex_reset": False,  # UI toggle: send the hex command instead of text
 }
 
 

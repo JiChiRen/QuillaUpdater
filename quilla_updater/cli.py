@@ -182,8 +182,13 @@ def cmd_self_test(_args):
 
 def cmd_probe(args):
     console = Console(verbose=True)
-    sess = Session(args.port, args.baud, on_log=console.log,
-                   on_progress=console.progress)
+    try:
+        sess = Session(args.port, args.baud, on_log=console.log,
+                       on_progress=console.progress,
+                       reset_cmd=args.app_reset, reset_cmd_hex=args.app_reset_hex)
+    except ValueError as e:
+        print("[X] %s" % e, file=sys.stderr)
+        return 2
     try:
         sess._open()
         banner = sess._drain_text(4.0)
@@ -219,8 +224,13 @@ def cmd_flash(args):
     if not args.key:
         console.log("warn", i18n.t("cli.warn_no_key"))
 
-    sess = Session(args.port, args.baud, key_path=args.key,
-                   on_log=console.log, on_progress=console.progress)
+    try:
+        sess = Session(args.port, args.baud, key_path=args.key,
+                       on_log=console.log, on_progress=console.progress,
+                       reset_cmd=args.app_reset, reset_cmd_hex=args.app_reset_hex)
+    except ValueError as e:
+        print("[X] %s" % e, file=sys.stderr)
+        return 2
     try:
         result = sess.run(image)
     except UpgradeCancelled:
@@ -277,6 +287,10 @@ def _build_parser(default_lang):
                     help=i18n.t("cli.audit_help"))
     ap.add_argument("--lang", choices=("auto", "zh", "en"), default=default_lang,
                     help=i18n.t("cli.lang_help"))
+    ap.add_argument("--app-reset", metavar="TEXT", default="swqboot",
+                    help=i18n.t("cli.app_reset_help"))
+    ap.add_argument("--app-reset-hex", metavar="HEX", default=None,
+                    help=i18n.t("cli.app_reset_hex_help"))
     ap.add_argument("--version", action="version", version="%(prog)s " + __version__)
     return ap
 

@@ -143,7 +143,7 @@ which, so the host probes:
 |---|---|---|
 | A. upgrade-idle, QIAP flag left over | banner contains `enter upgrade mode` | send ENTER directly |
 | B. QBOOT shell | echo contains `qboot` | send `qiap`, wait for `enter upgrade mode`, ENTER |
-| C. APP shell (firmware running) | echo contains `app1` | send `swqboot`, wait for `[BOOT]`, then B |
+| C. APP shell (firmware running) | echo contains `app1` | send the APP→QBOOT reset command (default `swqboot`; a raw hex command can be supplied for APPs without the Quilla shell), wait for `[BOOT]`, then B |
 | D. upgrade-idle, raw sink | empty reply, no echo | send ENTER directly |
 
 A "send a newline and look for a `>` prompt" probe cannot distinguish B from D:
