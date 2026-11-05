@@ -132,7 +132,7 @@ SOF 位置上任何非 `0xA5` 的字节都会被丢弃 —— 主机正是靠这
 |---|---|---|
 | A. 升级空闲态，残留 QIAP 标志 | banner 含 `enter upgrade mode` | 直接发送 ENTER |
 | B. QBOOT shell | 回显含 `qboot` | 发送 `qiap`，等待 `enter upgrade mode`，再发 ENTER |
-| C. APP shell（固件运行中） | 回显含 `app1` | 发送 `swqboot`，等待 `[BOOT]`，转入 B |
+| C. APP shell（固件运行中） | 回显含 `app1` | 发送 APP→QBOOT 复位指令（默认 `swqboot`；对于不使用 Quilla shell 的 APP 可改用十六进制原样发送），等待 `[BOOT]`，转入 B |
 | D. 升级空闲态，原始接收 | 回复为空，无回显 | 直接发送 ENTER |
 
 「发一个换行、找一个 `>` 提示符」这种探测无法区分 B 与 D：shell 不会因为空行而重印提示符，

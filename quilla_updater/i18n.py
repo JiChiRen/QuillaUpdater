@@ -132,6 +132,14 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.probe": "探测板卡",
     "gui.clear_log": "清空日志",
 
+    "gui.app_reset": "APP → QBOOT 复位指令",
+    "gui.app_reset_use_hex": "使用十六进制指令",
+    "gui.app_reset_text": "文本指令",
+    "gui.app_reset_hex": "十六进制（空格分隔，例如 06 F0 5A 51 42 4F 54 80）",
+    "gui.app_reset_hint": "默认发送 'swqboot\\n'（文本）。切到十六进制时按原样发送字节，不追加换行；需要换行请自行包含 0D 0A。",
+    "gui.dlg_invalid_reset_title": "复位指令无效",
+    "gui.dlg_invalid_reset": "复位指令无效：{msg}\n示例：文本 'swqboot'，或十六进制 '06 F0 5A 51 42 4F 54 80'。",
+
     "gui.log": " 日志 ",
 
     "gui.fw_upgrade": "  固件升级  ",
@@ -262,15 +270,15 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.reading_banner": "读取设备输出（最长 4 秒）...",
     "sess.already_upgrade": "板卡已处于升级模式（存在 QIAP 标志），将直接发送 ENTER。",
     "sess.not_qboot_try_enter": "未检测到 QBOOT shell；先尝试直接发送 ENTER（兼容升级空闲态）。",
-    "sess.app_shell_reset": "检测到 APP shell（part 返回 app1）；通过 swqboot 复位进入 QBOOT。",
+    "sess.app_shell_reset": "检测到 APP shell（part 返回 app1）；通过复位指令 {cmd} 进入 QBOOT。",
     "sess.direct_enter_failed": "直接 ENTER 失败：{err}",
-    "sess.swqboot_attempt": "发送 'swqboot'（第 {n} 次）以复位进入 QBOOT ...",
+    "sess.swqboot_attempt": "发送复位指令 {cmd}（第 {n} 次）以进入 QBOOT ...",
     "sess.port_dropped_wait": "复位后端口 {port} 掉线，等待其重新枚举（最多 {timeout:.0f} 秒）...",
     "sess.post_reset_output": "复位后输出: {data!r}",
-    "sess.post_swqboot_part": "swqboot 后 part -> {data!r}",
+    "sess.post_swqboot_part": "复位指令后 part -> {data!r}",
     "sess.in_qboot_shell": "板卡处于 QBOOT shell。",
-    "sess.still_app": "swqboot 后仍处于 APP shell（第 {n} 次），判定复位未生效。",
-    "sess.no_echo_assume": "swqboot 后无回显，假定板卡已处于升级空闲态。",
+    "sess.still_app": "复位指令 {cmd} 后仍处于 APP shell（第 {n} 次），判定复位未生效。",
+    "sess.no_echo_assume": "复位指令后无回显，假定板卡已处于升级空闲态。",
     "sess.board_qboot": "板卡处于 QBOOT shell。",
     "sess.swqboot_fail": (
         "swqboot 未能将板卡切到 QBOOT shell：两次后 part 仍回 'app1'。\n"
@@ -287,7 +295,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.qiap_write_fail": "发送 qiap 时串口断开（{port}）",
     "sess.cannot_enter": (
         "无法进入升级模式。请将板卡置于 QBOOT shell（手动发送 'qiap'，或复位板卡），"
-        "或先在 APP 内执行 'swqboot'。\nbanner={banner!r}\npart={part!r}"
+        "或先让 APP 跳转到 QBOOT（例如执行复位指令）。\nbanner={banner!r}\npart={part!r}"
     ),
 
     "sess.signing_key": "签名私钥: {path}   （公钥 {pk}...）",
@@ -370,8 +378,8 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.err_sign_status": "SIGN 返回状态={status}",
     "sess.err_port_gone_qiap": "串口 {port} 已离线，无法发送 qiap。请重新连接后重试。",
     "sess.err_swqboot_fail": (
-        "swqboot 未能将板卡切到 QBOOT shell：两次之后 part 仍回 'app1'。\n"
-        "  1. 在串口终端手动输入 swqboot，确认板卡是否复位\n"
+        "复位指令 {cmd} 未能将板卡切到 QBOOT shell：两次之后 part 仍回 'app1'。\n"
+        "  1. 在串口终端手动输入该指令，确认板卡是否复位\n"
         "  2. 或按下板卡复位键或重新上电，然后重新执行升级\n"
         "（QBOOT 启动后 part 应返回 qboot，而非 app1）"
     ),
@@ -436,12 +444,14 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "cli.reading_banner": "读取设备输出（最长 4 秒）...",
     "cli.how_to_read": "结果解读：",
     "cli.hint_qboot": "  part 含 'qboot'  -> QBOOT shell，'qiap' 可直接升级",
-    "cli.hint_app1": "  part 含 'app1'   -> APP 运行中，工具会先执行 swqboot",
+    "cli.hint_app1": "  part 含 'app1'   -> APP 运行中，工具会先发送复位指令（默认 swqboot）",
     "cli.hint_idle": "  part 为空且无回显 -> 升级空闲态（等待 ENTER）或无连接",
     "cli.hint_pinfo": "  pinfo 显示 [PART]    -> 设备报告的 APP 区边界",
     "cli.baud_help": "波特率（默认 115200）",
     "cli.audit_help": "检查翻译表是否有缺漏",
     "cli.lang_help": "输出语言（默认沿用界面设置）",
+    "cli.app_reset_help": "文本复位指令：让 APP 跳转到 QBOOT（默认 swqboot）",
+    "cli.app_reset_hex_help": "十六进制复位指令（空格分隔，如 '06 F0 5A 51 42 4F 54 80'）；指定后替代文本指令，按原样发送",
 
     # ===================== EN strings =====================    "gui.title_en": "Quilla Updater - QBOOT serial upgrade",
 
@@ -468,6 +478,14 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.cancel_en": "Cancel",
     "gui.probe_en": "Probe board",
     "gui.clear_log_en": "Clear log",
+
+    "gui.app_reset_en": "APP → QBOOT reset command",
+    "gui.app_reset_use_hex_en": "Use hexadecimal command",
+    "gui.app_reset_text_en": "Text command",
+    "gui.app_reset_hex_en": "Hex (space-separated, e.g. 06 F0 5A 51 42 4F 54 80)",
+    "gui.app_reset_hint_en": "Sends 'swqboot\\n' (text) by default. In hex mode the bytes are sent verbatim - no newline is appended; include 0D 0A yourself if the firmware needs one.",
+    "gui.dlg_invalid_reset_title_en": "Invalid reset command",
+    "gui.dlg_invalid_reset_en": "Invalid reset command: {msg}\nExamples: text 'swqboot', or hex '06 F0 5A 51 42 4F 54 80'.",
 
     "gui.log_en": " Log ",
 
@@ -592,15 +610,15 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.reading_banner_en": "Reading device output (up to 4 s) ...",
     "sess.already_upgrade_en": "Board already in upgrade mode (QIAP flag present); sending ENTER directly.",
     "sess.not_qboot_try_enter_en": "No QBOOT shell detected; trying a direct ENTER first (covers the upgrade-idle state).",
-    "sess.app_shell_reset_en": "APP shell detected (part answered app1); resetting into QBOOT via swqboot.",
+    "sess.app_shell_reset_en": "APP shell detected (part answered app1); entering QBOOT via reset command {cmd}.",
     "sess.direct_enter_failed_en": "Direct ENTER failed: {err}",
-    "sess.swqboot_attempt_en": "Sending 'swqboot' (attempt {n}) to reset into QBOOT ...",
+    "sess.swqboot_attempt_en": "Sending reset command {cmd} (attempt {n}) to enter QBOOT ...",
     "sess.port_dropped_wait_en": "Port {port} dropped on reset, waiting for it to re-enumerate (up to {timeout:.0f} s) ...",
     "sess.post_reset_output_en": "post-reset output: {data!r}",
-    "sess.post_swqboot_part_en": "post-swqboot part -> {data!r}",
+    "sess.post_swqboot_part_en": "post-reset part -> {data!r}",
     "sess.in_qboot_shell_en": "Board is in the QBOOT shell.",
-    "sess.still_app_en": "Still in the APP shell after swqboot (attempt {n}); the reset did not take effect.",
-    "sess.no_echo_assume_en": "No echo after swqboot; assuming the board is already in the upgrade-idle state.",
+    "sess.still_app_en": "Still in the APP shell after reset command {cmd} (attempt {n}); the reset did not take effect.",
+    "sess.no_echo_assume_en": "No echo after the reset command; assuming the board is already in the upgrade-idle state.",
     "sess.board_qboot_en": "Board is in the QBOOT shell.",
     "sess.swqboot_fail_en": (
         "swqboot did not move the board to the QBOOT shell: after two attempts "
@@ -705,9 +723,9 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.err_sign_status_en": "SIGN returned status={status}",
     "sess.err_port_gone_qiap_en": "Port {port} is offline; cannot send qiap. Reconnect and retry.",
     "sess.err_swqboot_fail_en": (
-        "swqboot did not move the board to the QBOOT shell: after two attempts "
-        "part still replies 'app1'.\n"
-        "  1. Enter swqboot manually in a serial terminal and confirm the board resets\n"
+        "reset command {cmd} did not move the board to the QBOOT shell: after "
+        "two attempts part still replies 'app1'.\n"
+        "  1. Enter the command manually in a serial terminal and confirm the board resets\n"
         "  2. Or press the board reset button or power-cycle, then start the upgrade again\n"
         "(once QBOOT has booted, part should return qboot, not app1)"
     ),
@@ -718,7 +736,8 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     ),
     "sess.err_cannot_enter_en": (
         "Could not enter upgrade mode. Put the board in the QBOOT shell (send "
-        "'qiap' manually, or reset the board), or run 'swqboot' from the APP first."
+        "'qiap' manually, or reset the board), or make the APP jump to QBOOT "
+        "first (e.g. send the reset command)."
         "\nbanner={banner!r}\npart={part!r}"
     ),
     "sess.err_image_above_ceiling_en": "Image is {size} B, above the programmable ceiling of {max} B (APP region).",
@@ -784,7 +803,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
         "  part contains 'qboot' -> QBOOT shell, 'qiap' can upgrade directly"
     ),
     "cli.hint_app1_en": (
-        "  part contains 'app1'  -> the APP is running, the tool runs swqboot first"
+        "  part contains 'app1'  -> the APP is running, the tool sends the reset command first (default swqboot)"
     ),
     "cli.hint_idle_en": (
         "  part empty and no echo -> upgrade-idle (waiting for ENTER) or not connected"
@@ -793,6 +812,8 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "cli.baud_help_en": "baud rate (default 115200)",
     "cli.audit_help_en": "check the translation table for gaps",
     "cli.lang_help_en": "output language (default: the persisted UI setting)",
+    "cli.app_reset_help_en": "Text reset command that makes the APP jump to QBOOT (default swqboot)",
+    "cli.app_reset_hex_help_en": "Hex reset command (space-separated, e.g. '06 F0 5A 51 42 4F 54 80'); overrides the text command and is sent verbatim",
 
     "sess.enter_payload_en": "ENTER payload: app_start=0x{start:08X}",
 }

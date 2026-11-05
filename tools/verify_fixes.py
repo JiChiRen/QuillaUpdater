@@ -58,7 +58,8 @@ sys.path.insert(0, ROOT)
 from quilla_updater import config, i18n, protocol as P  # noqa: E402
 from quilla_updater import session as S  # noqa: E402
 from quilla_updater.image import FirmwareImage  # noqa: E402
-from quilla_updater.session import Result, Session, UpgradeError  # noqa: E402
+from quilla_updater.session import (  # noqa: E402
+    Result, Session, UpgradeError, parse_app_reset_command)
 
 FAILS = []
 PASSES = []
@@ -721,6 +722,74 @@ def test_swqboot_clears_device_line_first():
           len(writes) > 1 and writes[1] == b"swqboot\n", writes)
 
 
+def test_parse_app_reset_command():
+    """The APP -> QBOOT trigger must resolve to the right wire bytes.
+
+    Default text "swqboot" becomes b"swqboot\\n"; a hex string becomes the raw
+    bytes verbatim (no newline added); and malformed hex must raise rather than
+    silently send garbage.
+    """
+    is_text, payload = parse_app_reset_command("swqboot", None)
+    check("parse.default is text swqboot+lf",
+          is_text and payload == b"swqboot\n", (is_text, payload))
+
+    is_text, payload = parse_app_reset_command("", "")
+    check("parse.empty text falls back to swqboot",
+          is_text and payload == b"swqboot\n", (is_text, payload))
+
+    is_text, payload = parse_app_reset_command("swqboot", "06 F0 5A 51 42 4F 54 80")
+    check("parse.hex takes precedence over text", not is_text, is_text)
+    check("parse.hex bytes verbatim, no newline",
+          payload == bytes.fromhex("06F05A51424F5480"),
+          payload.hex())
+
+    # Spaces, commas and colons are all tolerated as separators.
+    _, payload2 = parse_app_reset_command("x", "06,F0 5A:51")
+    check("parse.hex tolerates , and : separators",
+          payload2 == bytes.fromhex("06F05A51"), payload2.hex())
+
+    bad = ("zz", "06 F0 5", "06 F0 5A 51 42 4F 54 8")  # non-hex / odd / odd
+    for h in bad:
+        try:
+            parse_app_reset_command("swqboot", h)
+            check("parse.hex rejects %r" % h, False, h)
+        except ValueError:
+            check("parse.hex rejects %r" % h, True)
+        except Exception as exc:  # noqa: BLE001
+            check("parse.hex rejects %r" % h, False, repr(exc))
+
+
+def test_hex_reset_sent_verbatim():
+    """A hex reset command goes out raw, with no CRLF line-clear before it.
+
+    The CRLF clear exists only to flush a text shell's line buffer; injecting it
+    ahead of a binary trigger aimed at an APP without the Quilla shell would
+    corrupt the command, so hex mode must skip it.
+    """
+    sess = Session("COM0", reset_cmd_hex="06 F0 5A 51 42 4F 54 80")
+    check("hex mode is not text", not sess._app_reset_is_text,
+          sess._app_reset_is_text)
+    writes = []
+
+    def _write(data):
+        writes.append(data)
+        return True
+
+    sess._write_bytes = _write
+    sess._flush_input = lambda: None
+    sess._read_some = lambda: b""
+    sess._drain_text = lambda timeout=2.0, idle=None, first=None: b""
+    sess._query_line = lambda cmd, timeout=2.0, idle=0.35: b"part: qboot\r\n"
+    sess.port_lost = False
+
+    sess._reset_into_qboot()
+
+    check("hex.reset written verbatim, single frame",
+          writes == [bytes.fromhex("06F05A51424F5480")], writes)
+    check("hex.reset no CRLF clear precedes it",
+          not any(w == b"\r\n" for w in writes), writes)
+
+
 def test_chunk_fits_device_payload_buffer():
     """CHUNK must stay within QUILLA_QIAP_MAX_PAYLOAD, and there is no margin.
 
@@ -891,6 +960,8 @@ def main():
     test_banner_probe_exits_when_line_is_quiet()
     test_banner_probe_keeps_window_once_data_starts()
     test_swqboot_clears_device_line_first()
+    test_parse_app_reset_command()
+    test_hex_reset_sent_verbatim()
     test_run_does_not_hang_when_end_commits()
     test_no_key_with_public_key_names_the_real_cause()
     test_run_signs_on_key_device()

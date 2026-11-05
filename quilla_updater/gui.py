@@ -62,7 +62,7 @@ from . import config
 from . import i18n
 from .image import FirmwareImage, ImageError
 from .session import (Session, UpgradeError, UpgradeCancelled, PortOpenError,
-                      Progress)
+                      Progress, parse_app_reset_command)
 
 BAUD_RATES = ("115200", "230400", "460800", "921600")
 LOG_COLORS = {
@@ -110,6 +110,9 @@ class UpgradePage(ttk.Frame):
         self.var_fw = tk.StringVar(value=app.cfg["fw_path"])
         self.var_key = tk.StringVar(value=app.cfg["key_path"])
         self.var_use_key = tk.BooleanVar(value=app.cfg["use_key"])
+        self.var_app_reset = tk.StringVar(value=app.cfg["app_reset"])
+        self.var_app_reset_hex = tk.StringVar(value=app.cfg["app_reset_hex"])
+        self.var_use_hex_reset = tk.BooleanVar(value=app.cfg["use_hex_reset"])
         self.var_status = tk.StringVar(value=i18n.t("gui.status_ready"))
         self.var_detail = tk.StringVar(value="")
         self.var_fw_info = tk.StringVar(value=i18n.t("gui.fw_none"))
@@ -199,6 +202,31 @@ class UpgradePage(ttk.Frame):
             row=1, column=1, columnspan=3, sticky="w", pady=(4, 0))
         row += 1
 
+        # -- APP -> QBOOT reset command -------------------------------------
+        box = ttk.LabelFrame(self, padding=10)
+        self._tr(box, "text", "gui.app_reset")
+        box.grid(row=row, column=0, sticky="ew", pady=(0, 8))
+        box.columnconfigure(1, weight=1)
+        self._tr(ttk.Checkbutton(box, variable=self.var_use_hex_reset,
+                                 command=self._toggle_hex_reset), "text",
+                 "gui.app_reset_use_hex").grid(row=0, column=0, sticky="w")
+        self._tr(ttk.Label(box, text="文本指令"), "text",
+                 "gui.app_reset_text").grid(row=1, column=0, sticky="w",
+                                           padx=(0, 6))
+        self.ent_app_reset = ttk.Entry(box, textvariable=self.var_app_reset)
+        self.ent_app_reset.grid(row=1, column=1, columnspan=2, sticky="ew")
+        self._tr(ttk.Label(box, text="十六进制"), "text",
+                 "gui.app_reset_hex").grid(row=2, column=0, sticky="w",
+                                          padx=(0, 6))
+        self.ent_app_reset_hex = ttk.Entry(
+            box, textvariable=self.var_app_reset_hex)
+        self.ent_app_reset_hex.grid(row=2, column=1, columnspan=2, sticky="ew")
+        self._tr(ttk.Label(box, foreground="#555555", wraplength=520), "text",
+                 "gui.app_reset_hint").grid(row=3, column=0, columnspan=3,
+                                           sticky="w", pady=(4, 0))
+        self._toggle_hex_reset()
+        row += 1
+
         # -- actions ---------------------------------------------------------
         bar = ttk.Frame(self)
         bar.grid(row=row, column=0, sticky="ew", pady=(2, 8))
@@ -271,6 +299,11 @@ class UpgradePage(ttk.Frame):
         state = "readonly" if self.var_use_key.get() else "disabled"
         self.ent_key.configure(state=state)
         self.btn_key.configure(state="normal" if self.var_use_key.get() else "disabled")
+
+    def _toggle_hex_reset(self):
+        use = self.var_use_hex_reset.get()
+        self.ent_app_reset_hex.configure(state="normal" if use else "disabled")
+        self.ent_app_reset.configure(state="disabled" if use else "normal")
 
     def refresh_ports(self):
         try:
@@ -395,11 +428,26 @@ class UpgradePage(ttk.Frame):
         except ValueError:
             baud = 115200
 
+        # Resolve and validate the APP -> QBOOT reset command. The text form is
+        # used unless the hex toggle is on (then hex wins, text is ignored).
+        app_reset = self.var_app_reset.get()
+        app_reset_hex = (self.var_app_reset_hex.get()
+                         if self.var_use_hex_reset.get() else "")
+        try:
+            parse_app_reset_command(app_reset, app_reset_hex)
+        except ValueError as e:
+            messagebox.showerror(i18n.t("gui.dlg_invalid_reset_title"),
+                                 i18n.t("gui.dlg_invalid_reset", msg=str(e)))
+            return
+
         # Persist the choices the operator just made.
         config.update(fw_path=self.var_fw.get(),
                       key_path=self.var_key.get() if self.var_use_key.get() else "",
                       use_key=self.var_use_key.get(),
-                      port=port, baud=self.var_baud.get())
+                      port=port, baud=self.var_baud.get(),
+                      app_reset=app_reset,
+                      app_reset_hex=app_reset_hex,
+                      use_hex_reset=self.var_use_hex_reset.get())
 
         self._cancel_evt.clear()
         self._started_at = time.time()
@@ -419,7 +467,8 @@ class UpgradePage(ttk.Frame):
             sess = Session(port, baud, key_path=key,
                            on_log=lambda lvl, msg: self._queue.put(("log", lvl, msg)),
                            on_progress=lambda ph, d, t: self._queue.put(("prog", ph, d, t)),
-                           cancel=self._cancel_evt.is_set)
+                           cancel=self._cancel_evt.is_set,
+                           reset_cmd=app_reset, reset_cmd_hex=app_reset_hex)
             try:
                 result = sess.run(image)
                 self._queue.put(("done", result))
@@ -461,10 +510,14 @@ class UpgradePage(ttk.Frame):
         self.var_status.set(i18n.t("gui.status_probe_done"))
 
         def work():
+            app_reset = self.var_app_reset.get()
+            app_reset_hex = (self.var_app_reset_hex.get()
+                             if self.var_use_hex_reset.get() else "")
             sess = Session(port, baud,
                            on_log=lambda lvl, msg: self._queue.put(("log", lvl, msg)),
                            on_progress=lambda *a: None,
-                           cancel=self._cancel_evt.is_set)
+                           cancel=self._cancel_evt.is_set,
+                           reset_cmd=app_reset, reset_cmd_hex=app_reset_hex)
             try:
                 sess._open()
                 banner = sess._drain_text(4.0)
