@@ -288,6 +288,11 @@ python tools/verify_fixes.py                # 配置持久化、SIGN 语义、�
   CHECK、SEALED、SECURE 三种启动构建各完成一次完整升级，三次均通过；复位后观察到
   `[QAPP] Project V0.10.0001`。另有一次在未提供公钥的板卡上运行，覆盖了过去会空等 90 秒的
   `END` 阶段提交路径。
+- 可配置的 APP→QBOOT 复位指令：默认文本指令 `swqboot` 与裸十六进制指令均已验证。
+  在一块运行"不含 Quilla shell 的 APP"的板子上，发送 `06 F0 5A 51 42 4F 54 80`
+  （内嵌了字面量 "QBOT"）使 MCU 复位进入 QBOOT shell，随后完整签名升级成功完成。
+  十六进制路径刻意按原样发送、不追加换行，该次运行已证实：复位后的 `part` 回复
+  干净无残留（`part\r\nqboot\r\n> `）。
 
 仍未验证的部分：PY32F040xB 之外的 MCU（其 APP 区上限取决于各自的 `pinfo` 回复）；
 复位导致端口掉线后的重开路径 —— 该路径需要一块复位时会真正摘除 COM 口的探针才能触发；
