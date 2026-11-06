@@ -1,0 +1,9 @@
+QuillaUpdater
+Copyright 2026 JiChiRen Info. Tech.
+
+This product includes software developed by JiChiRen Info. Tech.
+(https://github.com/JiChiRen/QuillaUpdater).
+
+quilla_updater/ed25519.py is ported from Quilla's own
+tools/quilla_ed25519_sign.py, Copyright (c) 2026 JiChiRen Info. Tech.,
+under the Apache License, Version 2.0.

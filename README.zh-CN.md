@@ -1,7 +1,7 @@
 # Quilla Updater
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-3--clause%20BSD-brightgreen.svg" alt="3-clause BSD license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"></a>
   <a href="https://github.com/JiChiRen/Quilla"><img src="https://img.shields.io/badge/works%20with-Quilla%20QBOOT-00599C.svg" alt="works with Quilla QBOOT"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-pyserial%20only-orange.svg" alt="one dependency: pyserial">
@@ -328,11 +328,11 @@ python tools/build_exe.py --icon X.ico  # 覆盖内置的 Quilla logo
 
 ## 许可
 
-BSD-3-Clause，版权方与条款和本工具所服务的 Quilla 项目一致。
-每个源文件同样带有许可证头，单个文件被取出到其他项目时条款随之保留。
+Apache-2.0，版权方 JiChiRen Info. Tech.。每个源文件同样带有许可证头，
+单个文件被取出到其他项目时条款随之保留。
 `quilla_updater/ed25519.py` 移植自 Quilla 自研的 `tools/quilla_ed25519_sign.py`，
-版权所有 (c) 2026 JiChiRen Info. Tech.，采用同一许可。
+版权所有 (c) 2026 JiChiRen Info. Tech.，采用同一 Apache-2.0 许可。
 
-本仓库不含 contiki-NG 派生代码。Quilla 代码树中包含此类代码，
+本仓库不含 contiki-NG 派生代码。Quilla 固件代码树中包含此类代码，
 那些文件保留其原始许可（瑞典计算机科学研究所，SICS）。
 本项目的许可证头并不派生自它们，也不复述其条款。
