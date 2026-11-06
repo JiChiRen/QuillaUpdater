@@ -1,7 +1,7 @@
 # Quilla Updater
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-3--clause%20BSD-brightgreen.svg" alt="3-clause BSD license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license"></a>
   <a href="https://github.com/JiChiRen/Quilla"><img src="https://img.shields.io/badge/works%20with-Quilla%20QBOOT-00599C.svg" alt="works with Quilla QBOOT"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/dependencies-pyserial%20only-orange.svg" alt="one dependency: pyserial">
@@ -392,12 +392,12 @@ unsigned.
 
 ## License
 
-BSD-3-Clause, with the same copyright holder and terms as the Quilla project
-this tool serves. Every source file carries the header, so a file lifted out of
-this tree keeps its terms. `quilla_updater/ed25519.py` is ported from Quilla's
-own `tools/quilla_ed25519_sign.py`, Copyright (c) 2026 JiChiRen Info. Tech.,
-same license.
+Apache-2.0, copyright JiChiRen Info. Tech. Every source file carries the
+header, so a file lifted out of this tree keeps its terms.
+`quilla_updater/ed25519.py` is ported from Quilla's own
+`tools/quilla_ed25519_sign.py`, Copyright (c) 2026 JiChiRen Info. Tech., under
+the same Apache-2.0 licence.
 
-This repository contains no contiki-NG code. The Quilla tree does, and those
-files keep their original Swedish Institute of Computer Science licence. The
-header used here is not derived from theirs and does not restate it.
+This repository contains no contiki-NG code. The Quilla firmware tree does, and
+those files keep their original Swedish Institute of Computer Science licence.
+This tool's header is not derived from theirs and does not restate it.
