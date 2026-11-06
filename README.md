@@ -364,8 +364,12 @@ pip install -e .[build]
 python tools/build_exe.py            # both programs into dist/
 python tools/build_exe.py --gui      # GUI only
 python tools/build_exe.py --cli      # CLI only
-python tools/build_exe.py --icon q.ico
+python tools/build_exe.py --icon X.ico  # override the embedded Quilla logo
 ```
+
+The Quilla logo (`quilla.ico`) is embedded in both executables by default;
+pass `--icon` to use a different one. The GUI also shows the mark as its
+window icon.
 
 Produces `dist/QuillaUpdater.exe` (windowed, Tk bundled) and `dist/quflash.exe`
 (console). Both are `--onefile`: no Python, no `pip install`, no DLLs to ship
