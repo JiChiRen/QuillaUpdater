@@ -948,6 +948,24 @@ def main():
     root = tk.Tk()
     root.geometry("900x700")
     root.minsize(780, 600)
+    # Window icon: the Quilla mark. Falls back silently if the bundled PNG is
+    # missing (e.g. a stripped source checkout), so it never breaks startup.
+    try:
+        import importlib.resources as _ir
+        try:  # Python 3.9+
+            _png = _ir.files("quilla_updater").joinpath(
+                "resources/quilla-mark-256.png").read_bytes()
+        except AttributeError:  # Python 3.8 fallback
+            _png = _ir.read_binary("quilla_updater.resources",
+                                   "quilla-mark-256.png")
+        import os as _os, tempfile as _tf
+        _fd, _path = _tf.mkstemp(suffix=".png")
+        with _os.fdopen(_fd, "wb") as _fh:
+            _fh.write(_png)
+        root.iconphoto(True, tk.PhotoImage(file=_path))
+        root._quilla_icon_png = _path  # keep referenced for the process lifetime
+    except Exception:
+        pass
     try:
         style = ttk.Style()
         if "clam" in style.theme_names():

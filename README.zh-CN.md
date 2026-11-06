@@ -306,8 +306,11 @@ pip install -e .[build]
 python tools/build_exe.py            # 两个程序，输出到 dist/
 python tools/build_exe.py --gui      # 仅图形界面
 python tools/build_exe.py --cli      # 仅命令行
-python tools/build_exe.py --icon q.ico
+python tools/build_exe.py --icon X.ico  # 覆盖内置的 Quilla logo
 ```
+
+两个可执行文件默认都嵌入 Quilla logo（`quilla.ico`）；用 `--icon` 可换成别的。
+图形界面还会把该徽标作为窗口图标显示。
 
 产出 `dist/QuillaUpdater.exe`（窗口程序，已内置 Tk）与 `dist/quflash.exe`（控制台）。
 两者都是 `--onefile`：无需目标机安装 Python、无需 `pip install`、无需随附 DLL。

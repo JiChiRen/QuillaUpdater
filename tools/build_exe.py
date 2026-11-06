@@ -40,7 +40,7 @@ Usage::
     python tools/build_exe.py              # both programs
     python tools/build_exe.py --gui        # GUI only
     python tools/build_exe.py --cli        # CLI only
-    python tools/build_exe.py --icon q.ico # embed a Windows icon
+    python tools/build_exe.py --icon X.ico # override the embedded Quilla logo
 
 The build is reproducible from a clean checkout: nothing outside this
 repository is read, and the launchers are generated into ``build/freeze`` so
@@ -112,8 +112,20 @@ def build(kind: str, icon: str | None, cleanup: bool) -> str:
         args.append("--windowed")
     else:
         args.append("--console")
-    if icon:
-        args.extend(["--icon", icon])
+    # Bundle the window-icon PNG next to the GUI package so the running window
+    # (not just the file icon) shows the Quilla mark.
+    if kind == "gui":
+        res_png = os.path.join(ROOT, "quilla_updater", "resources",
+                               "quilla-mark-256.png")
+        if os.path.exists(res_png):
+            sep = ";" if os.name == "nt" else ":"
+            args += ["--add-data",
+                     "%s%squilla_updater/resources" % (res_png, sep)]
+    # Embed the Quilla logo by default; --icon overrides, a missing default is
+    # ignored rather than failing the build.
+    icon_path = icon if (icon and os.path.exists(icon)) else None
+    if icon_path:
+        args.extend(["--icon", icon_path])
 
     print("[build] %s -> %s" % (kind, os.path.join(DIST, name + (".exe" if os.name == "nt" else ""))))
     proc = subprocess.run(args, cwd=ROOT)
@@ -130,7 +142,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Freeze Quilla Updater into executables.")
     ap.add_argument("--gui", action="store_true", help="build the GUI executable only")
     ap.add_argument("--cli", action="store_true", help="build the CLI executable only")
-    ap.add_argument("--icon", default=None, help="path to a Windows .ico to embed")
+    ap.add_argument("--icon", default=os.path.join(ROOT, "quilla.ico"),
+                    help="path to a Windows .ico to embed "
+                         "(default: the Quilla logo in this repository)")
     ap.add_argument("--no-clean", action="store_true",
                     help="reuse the PyInstaller cache instead of rebuilding it")
     args = ap.parse_args(argv)
