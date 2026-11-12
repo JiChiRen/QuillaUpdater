@@ -31,7 +31,11 @@ The CRC covers [CMD][LEN][PAYLOAD] - not the SOF byte. The algorithm is
 CCITT 0x1021 reflected with an initial accumulator of 0 (see crc16_add).
 
 Commands:
-    ENTER 0x01 : app_start(4B LE) + unlock_key(8B)         -> ACK 0x81 status(1B)
+    ENTER 0x01 : app_start(4B LE) + unlock_key(8B) + image_secver(4B LE)
+                 (the 4-byte security version is appended since CR-0055; a
+                 device with a provisioned public key requires it and rejects
+                 a downgrade at ENTER, before any Flash write)
+                                                             -> ACK 0x81 status(1B)
     DATA  0x02 : start(4B) + end(4B) + data(<=CHUNK)       -> ACK 0x82 start(4B)
     END   0x03 : total_len(4B) + total_crc16(2B)           -> ACK 0x83 status(1B)
     SIGN  0x04 : signature(64B Ed25519)                    -> ACK 0x84 status(1B)
@@ -87,6 +91,8 @@ REASON = {
           "(missing .quilla_secver section / magic mismatch)",
     0x0A: "ROLLBACK  firmware security version is below the device floor "
           "(downgrade rejected)",
+    0x0B: "NO_SECVER  ENTER carried no image security version; this host tool "
+          "is too old for the flashed QBOOT (update the host tool)",
 }
 #: A CRC failure is the only retransmittable rejection.
 REASON_CRC = 0x03

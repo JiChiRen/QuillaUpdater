@@ -401,3 +401,33 @@ the same Apache-2.0 licence.
 This repository contains no contiki-NG code. The Quilla firmware tree does, and
 those files keep their original Swedish Institute of Computer Science licence.
 This tool's header is not derived from theirs and does not restate it.
+
+---
+
+## 13. SEC VER pre-check (host side, CR-0053)
+
+Before entering QIAP (sending ENTER), both the CLI and the GUI compare the
+`FW_SECVER` reported by `pinfo` with the QAV1 version at offset `0x400` of the
+image to be written:
+
+- `image >= device`: continue the IAP. A same-version image is accepted, matching
+  the device-side strict `< floor` check.
+- `image < device`: send no ENTER and no data, issue `swapp` to return the board to
+  the APP, and finish normally (GUI shows "Skipped").
+- Either version unreadable (old QBOOT, image without QAV1, upgrade-idle state):
+  skip the pre-check and follow the original flow.
+
+This pre-check only saves transfer time and improves log readability; it is **not
+a security control**. `FW_SECVER` is the version of the current APP image, not the
+strict floor derived from META / OTP counters.
+
+### 13.1 Device-side early reject at ENTER (CR-0055)
+
+The ENTER frame now carries the image's security version (4-byte LE after the
+unlock key). A QBOOT with a provisioned public key rejects a downgrade — and a
+host tool without the extension — **at ENTER, before any Flash write**, so the
+currently running APP is never overwritten by an image that would be refused at
+SIGN anyway. NAK reasons: `0x0A` downgrade, `0x09` no QAV1 record, `0x0B` host
+tool too old. The SIGN gate still reads the version from the image itself and
+remains the authority; an older QBOOT ignores the extra bytes, so the new host
+works against an old bootloader unchanged.

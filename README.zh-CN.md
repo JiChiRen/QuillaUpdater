@@ -336,3 +336,27 @@ Apache-2.0，版权方 JiChiRen Info. Tech.。每个源文件同样带有许可�
 本仓库不含 contiki-NG 派生代码。Quilla 固件代码树中包含此类代码，
 那些文件保留其原始许可（瑞典计算机科学研究所，SICS）。
 本项目的许可证头并不派生自它们，也不复述其条款。
+
+---
+
+## 13. SEC VER 版本预检（上位机侧，CR-0053）
+
+CLI 与 GUI 在进入 QIAP（发送 ENTER）之前，用 `pinfo` 回报的 `FW_SECVER` 与待烧录
+镜像 `0x400` 处 QAV1 记录的版本比较：
+
+- `image >= device`：继续 IAP；同版本放行，与设备侧 `< floor` 判据一致。
+- `image < device`：不发 ENTER、不传数据，发送 `swapp` 让设备返回 APP，工具正常
+  结束（GUI 状态显示「已跳过」）。
+- 任一侧版本不可读（旧 QBOOT 无该行、镜像无 QAV1 段、升级空闲态）：跳过预检，
+  按原流程进行。
+
+该预检只用于省传输、改善日志可读性，**不是安全控制**。`FW_SECVER` 是当前 APP 镜像的
+版本，不是 META floor / OTP 计数器的严格下限。
+
+### 13.1 设备侧 ENTER 阶段提前拒绝（CR-0055）
+
+ENTER 帧现在携带镜像安全版本（unlock key 之后的 4 字节小端）。已烧公钥的 QBOOT 在
+**ENTER 当场、任何 Flash 写入之前**拒绝降级镜像，也拒绝未携带该字段的上位机——注定
+在 SIGN 被拒的镜像不会再覆盖当前运行的 APP。NAK 码：`0x0A` 降级、`0x09` 无 QAV1 记录、
+`0x0B` 上位机过旧。SIGN 闸仍从镜像自身读版本，才是权威；旧版 QBOOT 忽略多余字节，
+新上位机对旧 bootloader 的行为不变。

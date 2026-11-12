@@ -48,8 +48,8 @@ from . import ed25519
 from . import config
 from . import i18n
 from .image import FirmwareImage, ImageError
-from .session import (Session, UpgradeError, UpgradeCancelled, PortOpenError,
-                      Progress, parse_app_reset_command)
+from .session import (Session, UpgradeError, UpgradeCancelled, UpgradeSkipped,
+                      PortOpenError, Progress, parse_app_reset_command)
 
 BAUD_RATES = ("115200", "230400", "460800", "921600")
 LOG_COLORS = {
@@ -459,6 +459,8 @@ class UpgradePage(ttk.Frame):
             try:
                 result = sess.run(image)
                 self._queue.put(("done", result))
+            except UpgradeSkipped as e:
+                self._queue.put(("skipped", str(e)))
             except UpgradeCancelled:
                 self._queue.put(("cancelled", None))
             except PortOpenError as e:
@@ -566,6 +568,14 @@ class UpgradePage(ttk.Frame):
             self.pbar.configure(mode="determinate", value=0)
             self.var_status.set(i18n.t("gui.status_cancelled"))
             self.log("warn", i18n.t("gui.dlg_cancelled"))
+            self._finish()
+            return
+
+        if kind == "skipped":
+            self.pbar.stop()
+            self.pbar.configure(mode="determinate", value=0)
+            self.var_status.set(i18n.t("gui.status_skipped"))
+            self.log("warn", i18n.t("gui.dlg_skipped"))
             self._finish()
             return
 

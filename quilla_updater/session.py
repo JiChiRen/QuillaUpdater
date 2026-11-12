@@ -105,7 +105,8 @@ from . import i18n
 from .image import BOOT_STAMP_MARKER
 
 __all__ = [
-    "UpgradeError", "UpgradeCancelled", "PortOpenError", "Session", "Progress",
+    "UpgradeError", "UpgradeCancelled", "UpgradeSkipped", "PortOpenError",
+    "Session", "Progress",
     "Result", "classify_open_error", "describe_open_error",
     "ACK_TIMEOUT", "SIGN_TIMEOUT", "APP_STAMP_TIMEOUT", "POST_CONFIRM_TIMEOUT",
     "MAX_RETRIES",
@@ -165,6 +166,9 @@ class UpgradeError(Exception):
 
 class UpgradeCancelled(Exception):
     """The operator cancelled; the board is left recoverable (QIAP flag set)."""
+
+class UpgradeSkipped(Exception):
+    """No upgrade needed: the image SEC VER is below the device current SEC VER."""
 
 
 class PortOpenError(UpgradeError):
@@ -373,6 +377,8 @@ class Session(object):
         self.app_end = 0x0801FFFF          # PY32F040xB fallback, overwritten by pinfo
         self.app_size = self.app_end - self.app_start + 1
         self.max_image_size = None         # None => host does not enforce a ceiling
+        self.device_fw_secver = None       # FW_SECVER reported by pinfo
+        self.image_secver = None              # QAV1 version of the image being sent
 
     # ---------------------------------------------------------------- plumbing
     def _log(self, level, text):
@@ -757,6 +763,8 @@ class Session(object):
         import re
         m_s = re.search(r"APP_START=0x([0-9A-Fa-f]+)", txt)
         m_e = re.search(r"APP_END=0x([0-9A-Fa-f]+)", txt)
+        m_v = re.search(r"FW_SECVER=0x([0-9A-Fa-f]+)", txt)
+        self.device_fw_secver = int(m_v.group(1), 16) if m_v else None
         if m_s and m_e:
             self.app_start = int(m_s.group(1), 16)
             self.app_end = int(m_e.group(1), 16)
@@ -766,6 +774,29 @@ class Session(object):
                                      end=self.app_end, size=self.app_size))
             return True
         self._log("warn", i18n.t("sess.partition_fail"))
+        return False
+
+    def _precheck_secver(self):
+        """Continue only when image SEC VER >= device SEC VER (host-side only).
+
+        Returns True to continue, False when the upgrade was skipped and the
+        board was sent back to the APP. The device-side SIGN gate remains the
+        final authority; unknown versions skip the pre-check.
+        """
+        dev, img = self.device_fw_secver, self.image_secver
+        if dev is None or img is None:
+            self._log("info", i18n.t("sess.secver_unknown"))
+            return True
+        if img >= dev:
+            self._log("info", i18n.t("sess.secver_ok", ver=img, dev=dev))
+            return True
+        self._log("warn", i18n.t("sess.secver_reject", ver=img, dev=dev))
+        self._flush_input()
+        if self._write_bytes(b"swapp" + bytes([10])):
+            if self._wait_text(b"[QAPP]", timeout=4.0):
+                self._log("info", i18n.t("sess.back_to_app"))
+            else:
+                self._log("warn", i18n.t("sess.back_to_app_manual"))
         return False
 
     def ensure_upgrade_mode(self):
@@ -788,7 +819,7 @@ class Session(object):
             self._log("info", i18n.t("sess.already_upgrade"))
             self._flush_input()
             self.enter()
-            return
+            return True
 
         self._flush_input()
         part = self._query_line(b"part\n", timeout=2.0)
@@ -811,7 +842,7 @@ class Session(object):
                 self._log("info", i18n.t("sess.not_qboot_try_enter"))
                 try:
                     self.enter()
-                    return
+                    return True
                 except UpgradeCancelled:
                     raise
                 except Exception as e:
@@ -820,6 +851,8 @@ class Session(object):
                 self._reset_into_qboot()
 
         self.fetch_partition()
+        if not self._precheck_secver():
+            return False
 
         for attempt in range(1, 4):
             self._check_cancel()
@@ -832,7 +865,7 @@ class Session(object):
                 self._log("info", i18n.t("sess.entered_upgrade", n=attempt))
                 self._flush_input()
                 self.enter()
-                return
+                return True
             self._log("warn", i18n.t("sess.qiap_attempt", n=attempt))
 
         raise UpgradeError(i18n.t("sess.err_cannot_enter", banner=banner, part=part))
@@ -930,8 +963,17 @@ class Session(object):
 
     # -------------------------------------------------------------- commands
     def enter(self):
-        payload = struct.pack("<I", self.app_start) + P.UNLOCK_KEY
-        self._log("info", i18n.t("sess.enter_sent", start=self.app_start))
+        # The 4-byte image security version (QAV1 record, 0 when the image has
+        # none) lets a keyed QBOOT reject a downgrade right here -- before any
+        # DATA reaches Flash, so the currently running APP is never destroyed
+        # by an upgrade that would be refused at SIGN anyway (CR-0055). The
+        # SIGN gate still reads the version from the image itself and stays
+        # the authority: a lying host only gets a later rejection.
+        secver = self.image_secver if self.image_secver is not None else 0
+        payload = struct.pack("<I", self.app_start) + P.UNLOCK_KEY + \
+            struct.pack("<I", secver)
+        self._log("info", i18n.t("sess.enter_sent_secver",
+                                 start=self.app_start, secver=secver))
         self.on_progress(Progress.ENTER, 0, 0)
         r = self._transact(P.CMD_ENTER, payload, P.ACK_ENTER)
         status = r[0] if r else 0
@@ -1150,7 +1192,9 @@ class Session(object):
         self._open()
         try:
             self.on_progress(Progress.DETECT, 0, 0)
-            self.ensure_upgrade_mode()
+            self.image_secver = image.secver
+            if not self.ensure_upgrade_mode():
+                raise UpgradeSkipped(i18n.t("sess.upgrade_skipped"))
             # Detection is the slowest and least visible phase (banner drain,
             # part probe, possible swqboot re-enumeration). Log its cost so a
             # 30 s session is not mistaken for a slow link.

@@ -373,7 +373,14 @@ def _run_on_fake_board(fake):
     sess.close = lambda: None
     sess._write_bytes = lambda data: (fake.write(data), True)[1]
     sess._read_some = fake.read
-    sess.ensure_upgrade_mode = sess.enter
+
+    def _fake_enter_mode():
+        # run() treats a falsy return as "skipped by the SEC VER pre-check"
+        # and raises UpgradeSkipped; the real ensure_upgrade_mode() returns
+        # True on success, and the fake must honour that contract (CR-0053).
+        sess.enter()
+        return True
+    sess.ensure_upgrade_mode = _fake_enter_mode
     return sess.run(FirmwareImage("<mem>", _FAKE_IMG))
 
 
@@ -406,7 +413,13 @@ def test_no_key_with_public_key_names_the_real_cause():
     sess.close = lambda: None
     sess._write_bytes = lambda data: (fake.write(data), True)[1]
     sess._read_some = fake.read
-    sess.ensure_upgrade_mode = sess.enter
+
+    def _fake_enter_mode():
+        # Same contract as the real ensure_upgrade_mode(): True on success
+        # (run() maps a falsy return to "skipped by the SEC VER pre-check").
+        sess.enter()
+        return True
+    sess.ensure_upgrade_mode = _fake_enter_mode
 
     t0 = time.time()
     err = None
@@ -538,7 +551,9 @@ def test_live_port_without_evidence_fails():
     sess.close = lambda: None
     sess.on_log = lambda lvl, txt: None
     sess.on_progress = lambda *a: None
-    sess.ensure_upgrade_mode = lambda: None
+    # True, not None: since CR-0053 run() maps a falsy return to "skipped by
+    # the SEC VER pre-check"; this test wants to bypass detection entirely.
+    sess.ensure_upgrade_mode = lambda: True
     sess.reset_rx_log = lambda: None
     sess.send_data = lambda data: (len(data), 0)
     sess.end = lambda n, crc: None

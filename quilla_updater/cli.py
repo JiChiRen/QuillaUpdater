@@ -117,7 +117,9 @@ def cmd_self_test(_args):
 
     print("[self-test] frame codec + CRC round-trip ...")
     cases = [
-        (CMD_ENTER, struct.pack("<I", APP_START) + UNLOCK_KEY),
+        # CR-0055: ENTER now carries image_secver(4B LE) after the unlock key.
+        (CMD_ENTER, struct.pack("<I", APP_START) + UNLOCK_KEY
+         + struct.pack("<I", 1)),
         (CMD_DATA, struct.pack("<II", APP_START, APP_START + 47) + b"\xAA" * 48),
         (CMD_END, struct.pack("<I", 1234) + struct.pack("<H", 0xBEEF)),
     ]

@@ -210,6 +210,8 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.status_ready": "就绪",
     "gui.status_connecting": "连接中 ...",
     "gui.status_success": "升级成功",
+    "gui.status_skipped": "已跳过（版本不高于当前）",
+    "gui.dlg_skipped": "版本预检判定无需升级，未传输数据；设备已返回 APP。",
     "gui.status_cancelled": "已取消",
     "gui.status_port_err": "串口打不开",
     "gui.status_failed": "失败",
@@ -288,6 +290,12 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.signing_key": "签名私钥: {path}   （公钥 {pk}...）",
     "sess.no_key": "未提供签名私钥：将不发送 SIGN 帧。已烧录公钥的设备会拒绝本次升级。",
     "sess.image_secver": "镜像安全版本 = {ver} (0x{ver:X})",
+    "sess.secver_unknown": "设备或镜像未提供安全版本（旧 QBOOT 或镜像无 QAV1 段），跳过版本预检；仍以设备 SIGN 闸门为准。",
+    "sess.secver_ok": "版本预检通过：镜像 {ver} >= 设备 {dev}，继续升级。",
+    "sess.secver_reject": "版本预检拒绝：镜像 {ver} < 设备 {dev}；跳过升级并发送 swapp 返回 APP。",
+    "sess.back_to_app": "设备已返回 APP。",
+    "sess.back_to_app_manual": "未见 APP 启动横幅；若设备仍停在 QBOOT shell，请手动执行 swapp。",
+    "sess.upgrade_skipped": "已跳过升级：新固件安全版本低于设备当前版本，未传输任何数据；设备已返回 APP。",
     "sess.image_no_secver": "镜像无 .quilla_secver 段 - KEY 版 QBOOT 将以 VER(0x09) 拒绝。",
     "sess.image_too_big": "镜像 {size} B，超出可编程上限 {max} B（APP 区）。",
     "sess.err_key_needed": (
@@ -301,6 +309,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.unexpected_resp": "收到非预期响应 0x{cmd:02X}（期望 ACK 0x{ack:02X}）",
 
     "sess.enter_sent": "ENTER (app_start=0x{start:08X})",
+    "sess.enter_sent_secver": "ENTER（app_start=0x{start:08X}，镜像 SEC VER={secver}）",
     "sess.enter_payload": "ENTER 载荷: app_start=0x{start:08X}",  # legacy alias
     "sess.enter_status": "ENTER 返回状态={status}",
     "sess.data_addr_mismatch": (
@@ -553,6 +562,8 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "gui.status_ready_en": "Ready",
     "gui.status_connecting_en": "Connecting ...",
     "gui.status_success_en": "Succeeded",
+    "gui.status_skipped_en": "Skipped (not newer than device)",
+    "gui.dlg_skipped_en": "Version pre-check found no upgrade needed; no data sent, board returned to the APP.",
     "gui.status_cancelled_en": "Cancelled",
     "gui.status_port_err_en": "Cannot open port",
     "gui.status_failed_en": "Failed",
@@ -630,6 +641,12 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.signing_key_en": "Signing key: {path}  (public key {pk}...)",
     "sess.no_key_en": "No signing key: no SIGN frame will be sent. A device with a public key flashed will reject this upgrade.",
     "sess.image_secver_en": "Image security version = {ver} (0x{ver:X})",
+    "sess.secver_unknown_en": "Device or image SEC VER unavailable (old QBOOT or no QAV1 region); version pre-check skipped, device SIGN gate still applies.",
+    "sess.secver_ok_en": "SEC VER pre-check OK: image {ver} >= device {dev}, continuing.",
+    "sess.secver_reject_en": "SEC VER pre-check REJECT: image {ver} < device {dev}; skipping upgrade and sending swapp to return to the APP.",
+    "sess.back_to_app_en": "Board returned to the APP.",
+    "sess.back_to_app_manual_en": "No APP banner seen; if still at the QBOOT shell, run swapp manually.",
+    "sess.upgrade_skipped_en": "Upgrade skipped: image SEC VER is below the device version, no data was sent; board returned to the APP.",
     "sess.image_no_secver_en": "Image has no .quilla_secver region - a KEY build will reject it with VER(0x09).",
     "sess.image_too_big_en": "Image is {size} B, above the programmable ceiling of {max} B (APP region).",
     "sess.err_key_needed_en": (
@@ -644,6 +661,7 @@ _STRINGS = {    # ===================== GUI chrome (static) ====================
     "sess.unexpected_resp_en": "Unexpected response 0x{cmd:02X} (expected ACK 0x{ack:02X})",
 
     "sess.enter_sent_en": "ENTER (app_start=0x{start:08X})",
+    "sess.enter_sent_secver_en": "ENTER (app_start=0x{start:08X}, image SEC VER={secver})",
     "sess.enter_status_en": "ENTER returned status={status}",
     "sess.data_addr_mismatch_en": (
         "DATA chunk {i} echoed the wrong address (expected 0x{exp:08X}, got 0x{got:08X}); "
