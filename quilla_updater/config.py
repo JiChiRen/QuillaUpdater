@@ -39,7 +39,10 @@ DEFAULTS = {
     "port": "",
     "baud": "115200",
     "lang": "auto",          # "auto" | "zh" | "en"
-    "last_dir": "",          # last directory used by a file dialog
+    "fw_dir": "",            # last directory used by the firmware dialog
+    "keyfile_dir": "",       # last directory used by a private-key dialog
+    "last_dir": "",          # legacy shared dialog directory (pre-split);
+                             # kept only as a first-run fallback
     "key_dir": "keys",       # last output directory on the key tool page
     "app_reset": "swqboot",  # text command that makes the APP jump to QBOOT
     "app_reset_hex": "",     # raw hex reset command (takes precedence); "" = off

@@ -357,7 +357,8 @@ class UpgradePage(ttk.Frame):
     def pick_firmware(self):
         path = filedialog.askopenfilename(
             title=i18n.t("gui.qapp_bin"),
-            initialdir=self.app.cfg["last_dir"] or None,
+            initialdir=self.app.cfg["fw_dir"]
+                       or self.app.cfg["last_dir"] or None,
             filetypes=[("Firmware image", "*.bin"), ("All files", "*.*")])
         if not path:
             return
@@ -371,12 +372,13 @@ class UpgradePage(ttk.Frame):
         self._fw_meta = (img.name, img.size, img.secver, img.sha256.hex())
         self._render_fw_info()
         self.log("info", img.summary())
-        self.app.update_cfg(fw_path=path, last_dir=os.path.dirname(path))
+        self.app.update_cfg(fw_path=path, fw_dir=os.path.dirname(path))
 
     def pick_key(self):
         path = filedialog.askopenfilename(
             title=i18n.t("gui.private_key"),
-            initialdir=self.app.cfg["last_dir"] or None,
+            initialdir=self.app.cfg["keyfile_dir"]
+                       or self.app.cfg["last_dir"] or None,
             filetypes=[("Key", "*.hex"), ("All files", "*.*")])
         if not path:
             return
@@ -390,7 +392,7 @@ class UpgradePage(ttk.Frame):
         self._key_pk = pk
         self._render_key_info()
         self.log("info", i18n.t("gui.key_loaded", name=os.path.basename(path)))
-        self.app.update_cfg(key_path=path, last_dir=os.path.dirname(path))
+        self.app.update_cfg(key_path=path, keyfile_dir=os.path.dirname(path))
 
     # ------------------------------------------------------------------ worker
     def start(self):
@@ -764,18 +766,19 @@ class KeyToolPage(ttk.Frame):
 
     def _pick_dir(self):
         d = filedialog.askdirectory(title=i18n.t("gui.output_dir"),
-                                    initialdir=self.app.cfg["last_dir"] or None)
+                                    initialdir=self.app.cfg["key_dir"] or None)
         if d:
             self.var_dir.set(d)
             self.app.update_cfg(key_dir=d)
 
     def _pick_priv(self):
         p = filedialog.askopenfilename(title=i18n.t("gui.private_key"),
-                                      initialdir=self.app.cfg["last_dir"] or None,
+                                      initialdir=self.app.cfg["keyfile_dir"]
+                                                 or self.app.cfg["last_dir"] or None,
                                       filetypes=[("Key", "*.hex"), ("All files", "*.*")])
         if p:
             self.var_priv.set(p)
-            self.app.update_cfg(last_dir=os.path.dirname(p))
+            self.app.update_cfg(keyfile_dir=os.path.dirname(p))
 
     def _copy(self, text, what):
         if not text:
