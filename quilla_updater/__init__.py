@@ -32,7 +32,7 @@ shells over these two classes; the protocol itself lives in
 quilla_updater.protocol and knows nothing about serial ports or windows.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 from .image import FirmwareImage, ImageError          # noqa: E402,F401
 from .session import (                                # noqa: E402,F401
