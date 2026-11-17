@@ -371,7 +371,7 @@ class UpgradePage(ttk.Frame):
         self._fw_meta = (img.name, img.size, img.secver, img.sha256.hex())
         self._render_fw_info()
         self.log("info", img.summary())
-        config.update(fw_path=path, last_dir=os.path.dirname(path))
+        self.app.update_cfg(fw_path=path, last_dir=os.path.dirname(path))
 
     def pick_key(self):
         path = filedialog.askopenfilename(
@@ -390,7 +390,7 @@ class UpgradePage(ttk.Frame):
         self._key_pk = pk
         self._render_key_info()
         self.log("info", i18n.t("gui.key_loaded", name=os.path.basename(path)))
-        config.update(key_path=path, last_dir=os.path.dirname(path))
+        self.app.update_cfg(key_path=path, last_dir=os.path.dirname(path))
 
     # ------------------------------------------------------------------ worker
     def start(self):
@@ -428,7 +428,7 @@ class UpgradePage(ttk.Frame):
             return
 
         # Persist the choices the operator just made.
-        config.update(fw_path=self.var_fw.get(),
+        self.app.update_cfg(fw_path=self.var_fw.get(),
                       key_path=self.var_key.get() if self.var_use_key.get() else "",
                       use_key=self.var_use_key.get(),
                       port=port, baud=self.var_baud.get(),
@@ -656,7 +656,7 @@ class UpgradePage(ttk.Frame):
         self.btn_cancel.configure(state="disabled")
         self._cancel_evt.clear()
         self._worker = None
-        config.update(port=self._selected_port(), baud=self.var_baud.get())
+        self.app.update_cfg(port=self._selected_port(), baud=self.var_baud.get())
 
 
 class KeyToolPage(ttk.Frame):
@@ -767,7 +767,7 @@ class KeyToolPage(ttk.Frame):
                                     initialdir=self.app.cfg["last_dir"] or None)
         if d:
             self.var_dir.set(d)
-            config.update(key_dir=d)
+            self.app.update_cfg(key_dir=d)
 
     def _pick_priv(self):
         p = filedialog.askopenfilename(title=i18n.t("gui.private_key"),
@@ -775,7 +775,7 @@ class KeyToolPage(ttk.Frame):
                                       filetypes=[("Key", "*.hex"), ("All files", "*.*")])
         if p:
             self.var_priv.set(p)
-            config.update(last_dir=os.path.dirname(p))
+            self.app.update_cfg(last_dir=os.path.dirname(p))
 
     def _copy(self, text, what):
         if not text:
@@ -873,6 +873,17 @@ class UpdaterApp(ttk.Frame):
         self._build_lang_bar()
         self._set_title()
 
+    # --------------------------------------------------------- config updates
+    def update_cfg(self, **fields):
+        """Patch the persistent config and refresh the in-memory snapshot.
+
+        ``config.update()`` does a load-patch-save on disk and returns the
+        merged config; without assigning that result back, ``self.cfg`` would
+        go stale and every file dialog would reopen at the directory that was
+        saved at startup instead of the one last selected in this session.
+        """
+        self.cfg = config.update(**fields)
+
     # --------------------------------------------------------- language switch
     def _build_lang_bar(self):
         top = ttk.Frame(self)
@@ -899,8 +910,7 @@ class UpdaterApp(ttk.Frame):
         label = self.var_lang.get()
         code = next((c for c, key in LANG_CHOICES
                      if i18n.t(key) == label), "auto")
-        self.cfg["lang"] = code
-        config.update(lang=code)
+        self.update_cfg(lang=code)
         self._apply_language()
 
     def _apply_language(self):
