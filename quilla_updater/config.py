@@ -18,18 +18,30 @@
 """
 Persistent settings.
 
-Kept out of the repository (it lives in the user's home directory), because it
-holds the operator's last-used firmware / key paths and the UI language: things
-that are personal to whoever runs the tool, not part of the project source.
+The file lives next to the application (the executable's own directory when
+frozen, the source tree directory when run from Python), so a portable copy
+of the tool carries its settings with it. It holds the operator's last-used
+firmware / key paths and UI language; keep it out of version control.
 
-The file is best-effort only: if the home directory is not writable the tool
-still runs, it just does not remember choices across launches.
+For a one-file PyInstaller build ``__file__`` points into a temporary
+extraction directory, so the application directory must come from
+``sys.executable``. The file is best-effort: if the directory is not writable
+the tool still runs, it just does not remember choices across launches.
 """
 
 import json
 import os
+import sys
 
-_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".quilla_updater")
+
+def app_dir():
+    """Directory that holds the application (exe when frozen, source otherwise)."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+_CONFIG_DIR = app_dir()
 _CONFIG_PATH = os.path.join(_CONFIG_DIR, "config.json")
 
 DEFAULTS = {

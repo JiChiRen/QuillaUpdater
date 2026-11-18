@@ -17,6 +17,10 @@ dist/
 venv/
 env/
 
+# ---- operator settings: portable with the exe, never committed ----
+# config.json holds the operator's last-used firmware / private-key paths.
+config.json
+
 # ---- secrets: never commit key material ----
 # The private half of a signing keypair. A leaked seed lets anyone sign an
 # image the device accepts, which defeats secure boot entirely.

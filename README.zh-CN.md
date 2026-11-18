@@ -46,8 +46,8 @@
 
 ## 配置项
 
-操作者偏好保存在 `~/.quilla_updater/config.json`（位于仓库之外 —— 它属于运行工具的这台
-机器，不属于项目源码）：
+操作者偏好保存在**应用同目录**的 `config.json`（源码运行时在仓库根目录）。
+连同工具整体拷贝即可带走配置；该文件不要纳入版本控制：
 
 | 键 | 含义 |
 |---|---|
@@ -69,7 +69,7 @@
 
 从 [Releases](https://github.com/JiChiRen/QuillaUpdater/releases) 下载最新的
 `QuillaUpdater.exe` 直接运行。它是单个文件，已内置解释器、`pyserial` 与 Tk；
-不安装任何东西，也不会在 `%USERPROFILE%\.quilla_updater\` 之外写入文件。
+不安装任何东西，配置只写入 exe 同目录的 `config.json`。
 
 同一发布页的 `quflash.exe` 为控制台版本，适用于产线或无法点击按钮的 CI 环节。
 
@@ -251,7 +251,7 @@ quilla_updater/
   image.py      .bin 加载、SHA-256、.quilla_secver、期望启动戳
   ed25519.py    RFC 8032 签名，仅用标准库
   ports.py      串口枚举，含 USB 桥接芯片识别
-  config.py     操作者偏好持久化（~/.quilla_updater/config.json）
+  config.py     操作者偏好持久化（应用同目录 config.json）
   i18n.py       双语文案表与系统语言检测
   cli.py        无界面入口
   gui.py        Tk 前端

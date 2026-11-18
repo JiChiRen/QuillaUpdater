@@ -56,8 +56,9 @@ it costs you a minute.
 
 ## Settings
 
-Operator preferences live in `~/.quilla_updater/config.json` (outside the repo -
-they are personal to whoever runs the tool, not part of the project source):
+Operator preferences live in `config.json` **next to the executable** (at the
+repository root when run from source). A portable copy of the tool carries
+its settings with it; keep the file out of version control:
 
 | Key | Meaning |
 |---|---|
@@ -68,8 +69,8 @@ they are personal to whoever runs the tool, not part of the project source):
 | `lang` | `auto` / `zh` / `en` |
 | `last_dir` / `key_dir` | last directories used by the file dialogs |
 
-The file is best-effort: if the home directory is not writable the tool still
-runs, it just does not remember choices across launches.
+The file is best-effort: if the executable's directory is not writable the tool
+still runs, it just does not remember choices across launches.
 
 Language selection is `auto` by default, which resolves to Chinese on a
 Chinese-locale host and English everywhere else. Pick an explicit value in the
@@ -82,7 +83,7 @@ top bar to override it; the choice is persisted and applies to the CLI too.
 Download the latest `QuillaUpdater.exe` from
 [Releases](https://github.com/JiChiRen/QuillaUpdater/releases) and run it. It is a
 single file with the interpreter, `pyserial` and Tk bundled; nothing is installed
-and nothing is written outside `%USERPROFILE%\.quilla_updater\`.
+and settings are written only to `config.json` in the executable's own directory.
 
 `quflash.exe` from the same release is the console build, for a production line
 or a CI step that cannot click a button.
@@ -299,7 +300,7 @@ quilla_updater/
   image.py      .bin loading, SHA-256, .quilla_secver, expected boot stamp
   ed25519.py    RFC 8032 signing, stdlib only
   ports.py      port enumeration with USB-bridge identification
-  config.py     persisted operator settings (~/.quilla_updater/config.json)
+  config.py     persisted operator settings (config.json beside the app)
   i18n.py       bilingual string table + locale detection
   cli.py        headless entry point
   gui.py        Tk front end
